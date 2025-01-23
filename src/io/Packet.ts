@@ -13,6 +13,10 @@ import Environment from '#/util/Environment.js';
 export default class Packet extends DoublyLinkable {
     private static readonly crctable: Int32Array = new Int32Array(256);
     private static readonly bitmask: Uint32Array = new Uint32Array(33);
+    private static readonly crc8Table: Int32Array = new Int32Array(256);
+
+    private static readonly roundCount: number = 32;
+    private static readonly delta: number = 0x9E3779B9;
 
     /**
      * Reversed CRC-32 polynomial for Cyclic Redundancy Check (CRC).
@@ -39,6 +43,19 @@ export default class Packet extends DoublyLinkable {
 
             this.crctable[b] = remainder;
         }
+
+        for (let b = 0; b < 256; b++) {
+            let currentByte = b;
+            for (let bit = 0; bit < 8; bit++) {
+                if ((currentByte & 0x1) != 1) {
+                    currentByte >>>= 1;
+                }
+                else {
+                    currentByte = -306674912 ^ currentByte >>> 1;
+                }
+            }
+            this.crc8Table[b] = currentByte;
+        }
     }
 
     static getcrc(src: Uint8Array, offset: number, length: number): number {
@@ -47,6 +64,16 @@ export default class Packet extends DoublyLinkable {
             crc = (crc >>> 8) ^ (this.crctable[(crc ^ src[i]) & 0xFF]);
         }
         return ~crc;
+    }
+
+    static calculateCrc8(offset: number, size: number, data: Uint8Array) {
+        let crc = -1;
+        for (let currentByte = offset; currentByte < size; currentByte++) {
+            const tableIndex = 0xff & (crc ^ data[currentByte]);
+            crc = this.crc8Table[tableIndex] ^ crc >>> 8;
+        }
+        crc ^= 0xffffffff;
+        return crc;
     }
 
     static checkcrc(src: Uint8Array, offset: number, length: number, expected: number = 0): boolean {
@@ -441,6 +468,29 @@ export default class Packet extends DoublyLinkable {
         this.pos = 0;
         this.pdata(rawDec, 0, rawDec.length);
         this.pos = 0;
+    }
+
+    decrypt(keys: Uint32Array, bufferStart: number, bufferLength: number) {
+        const blockCount = (bufferLength - bufferStart) / 8;
+        const originalPosition = this.pos;
+
+        for (let block = 0; blockCount > block; block++) {
+            let v0 = this.g4();
+            let v1 = this.g4();
+
+            let sum = Packet.delta * Packet.roundCount;
+
+            for (let i = 0; i < Packet.roundCount; i++) {
+                v1 -= (v0 >>> 5 ^ v0 << 4) + v0 ^ sum + keys[~0x71dffffc & sum >>> 11];
+                sum -= Packet.delta;
+                v0 -= (v1 >>> 5 ^ v1 << 4) + v1 ^ keys[0x3 & sum] + sum;
+            }
+
+            this.pos -= 8;
+            this.p4(v0);
+            this.p4(v1);
+        }
+        this.pos = originalPosition;
     }
 
     // later revs have tinyenc/tinydec methods

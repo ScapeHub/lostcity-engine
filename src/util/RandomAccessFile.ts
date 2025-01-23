@@ -38,6 +38,25 @@ export default class RandomAccessFile {
         this.pos += buffer.length;
     }
 
+    read(b: Uint8Array, length: number, offset: number): number {
+        const bytesRead = fs.readSync(this.fd, b, offset, length, this.pos);
+        this.pos += bytesRead;
+        return bytesRead;
+    }
+
+    write(b: Uint8Array, offset: number, length: number): void {
+        fs.writeSync(this.fd, b, offset, length, this.pos);
+        this.pos += length;
+    }
+
+    seek(position: number): void {
+        if (position < 0) {
+            throw new Error('Seek position cannot be negative.');
+        }
+
+        this.pos = position;
+    }
+
     close(): void {
         fs.closeSync(this.fd);
     }
