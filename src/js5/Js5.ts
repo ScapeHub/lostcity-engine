@@ -48,58 +48,71 @@ export default class Js5 {
         this._metadataIndex = new Js5Index(255, this._metadataChannel, this._dataChannel, 500000);
     }
 
+    public pack() {
+        this.skeletonCacheArchive.pack();
+        this.skinCacheArchive.pack();
+        this.configArchive.pack();
+        this.interfaceArchive.pack();
+        this.soundArchive.pack();
+        this.worldMapArchive.pack();
+        this.musicArchive.pack();
+        this.modelArchive.pack();
+        this.spriteArchive.pack();
+        this.textureArchive.pack();
+        this.huffmanArchive.pack();
+        this.jingleArchive.pack();
+    }
+
     public get skeletonCacheArchive(): Js5Archive {
-        return this._skeletonArchive ??= this.loadArchive(0);
+        return (this._skeletonArchive ??= this.loadArchive(0));
     }
 
     public get skinCacheArchive(): Js5Archive {
-        return this._skinArchive ??= this.loadArchive(1);
+        return (this._skinArchive ??= this.loadArchive(1));
     }
 
     public get configArchive(): Js5Archive {
-        return this._configArchive ??= this.loadArchive(2);
+        return (this._configArchive ??= this.loadArchive(2));
     }
 
     public get interfaceArchive(): Js5Archive {
-        return this._interfaceArchive ??= this.loadArchive(3);
+        return (this._interfaceArchive ??= this.loadArchive(3));
     }
 
     public get soundArchive(): Js5Archive {
-        return this._soundArchive ??= this.loadArchive(4);
+        return (this._soundArchive ??= this.loadArchive(4));
     }
 
     public get worldMapArchive(): Js5Archive {
-        return this._worldMapArchive ??= this.loadArchive(5);
+        return (this._worldMapArchive ??= this.loadArchive(5));
     }
 
     public get musicArchive(): Js5Archive {
-        return this._musicArchive ??= this.loadArchive(6);
+        return (this._musicArchive ??= this.loadArchive(6));
     }
 
     public get modelArchive(): Js5Archive {
-        return this._modelArchive ??= this.loadArchive(7);
+        return (this._modelArchive ??= this.loadArchive(7));
     }
 
     public get spriteArchive(): Js5Archive {
-        return this._spriteArchive ??= this.loadArchive(8);
+        return (this._spriteArchive ??= this.loadArchive(8));
     }
 
     public get textureArchive(): Js5Archive {
-        return this._textureArchive ??= this.loadArchive(9);
+        return (this._textureArchive ??= this.loadArchive(9));
     }
 
     public get huffmanArchive(): Js5Archive {
-        return this._huffmanArchive ??= this.loadArchive(10);
+        return (this._huffmanArchive ??= this.loadArchive(10));
     }
 
     public get jingleArchive(): Js5Archive {
-        return this._jingleArchive ??= this.loadArchive(11);
+        return (this._jingleArchive ??= this.loadArchive(11));
     }
 
     private loadArchive(id: number): Js5Archive {
         const dataIndex = new Js5Index(id, this._indexChannels[id], this._dataChannel, 1000000);
-        const archive = new Js5Archive(id, this._metadataIndex, dataIndex);
-        archive.decodeMetadata();
-        return archive;
+        return new Js5Archive(id, this._metadataIndex, dataIndex);
     }
 }

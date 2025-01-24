@@ -80,6 +80,10 @@ export default class Packet extends DoublyLinkable {
         return Packet.getcrc(src, offset, length) == expected;
     }
 
+    static allocDirect(size: number): Packet {
+        return new Packet(new Uint8Array(size));
+    }
+
     static alloc(type: number): Packet {
         let packet: Packet | null = null;
 
@@ -470,7 +474,7 @@ export default class Packet extends DoublyLinkable {
         this.pos = 0;
     }
 
-    decrypt(keys: Uint32Array, bufferStart: number, bufferLength: number) {
+    decrypt(keys: Int32Array, bufferStart: number, bufferLength: number) {
         const blockCount = (bufferLength - bufferStart) / 8;
         const originalPosition = this.pos;
 

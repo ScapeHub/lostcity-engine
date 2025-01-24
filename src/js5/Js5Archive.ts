@@ -4,153 +4,328 @@ import { gunzipDataSync } from '#/io/GZip.js';
 import BZip2 from '#/io/BZip2.js';
 import { copyBytes } from '#/util/ArrayCopy.js';
 import Js5Protocol from '#/js5/Js5Protocol.js';
-import NameHashCollection from '#/js5/NameHashCollection.js';
+import { genHash } from '#/io/Jagfile.js';
+
+type GroupMetadata = {
+    id: number;
+    version: number;
+    checksum: number;
+    size: number;
+    nameHash?: number; // Optional if names are present
+    files: Map<number, FileMetadata>;
+    keys?: Int32Array;
+    requiresPacking?: boolean;
+    isLoaded: boolean;
+};
+
+type FileMetadata = {
+    id: number;
+    size: number;
+    nameHash?: number; // Optional if names are present
+    content: Uint8Array | null; // Null until contents are loaded
+};
 
 export default class Js5Archive {
     public index: number;
     public idx255: Js5Index;
     public dataIndex: Js5Index;
     public checksum: number = 0;
-    public fileContentCache: Uint8Array[][] = [];
-    public groupContentCache: Uint8Array[] = [];
-    public fileIds: Uint32Array[] = [];
     public crc8: number = 0;
     public size: number = 0;
-    public groupIds: Uint32Array = new Uint32Array(0);
-    public groupVersions = new Uint32Array(0);
-    public groupChecksums = new Uint32Array(0);
-    public groupSizes: Uint32Array = new Uint32Array(0);
-    public nameHashes: Uint32Array = new Uint32Array(0);
-    public groupNames?: NameHashCollection;
-    public fileNames?: NameHashCollection[];
-    public fileNameHashes: Uint32Array[] = [];
+    public isNamed: boolean;
 
-    constructor(index: number, idx255: Js5Index, dataIndex: Js5Index) {
+    // Dynamic storage for group and file metadata
+    private groups: Map<number, GroupMetadata> = new Map();
+
+    private _isMetadataLoaded: boolean = false;
+
+    constructor(index: number, idx255: Js5Index, dataIndex: Js5Index, isNamed: boolean = false) {
         this.index = index;
         this.idx255 = idx255;
         this.dataIndex = dataIndex;
+        this.isNamed = isNamed;
     }
 
-    public getFile(groupId: number, fileId: number): Uint8Array {
-        const fileData = this.getEncryptableFileContents(groupId, fileId);
-        if (fileData == null) {
+    public readFile(groupId: number, fileId: number, keys?: Int32Array): Uint8Array {
+        if (!this._isMetadataLoaded) {
+            this.decodeMetadata();
+        }
+
+        const group = this.getGroupMetadata(groupId, true);
+        const file = group.files.get(fileId);
+        if (file == null) {
             throw new Error(`File not found for group ${groupId} file ${fileId}`);
         }
-        return fileData;
+
+        if (!file.content) {
+            throw new Error(`File not found for group ${groupId} file ${fileId}`);
+        }
+
+        return file.content;
     }
 
-    public getEncryptableFileContents(groupId: number, fileId: number, xteaKeys?: Uint32Array): Uint8Array | null {
-        if (groupId < 0 || groupId >= this.fileContentCache.length || this.fileContentCache[groupId] == null || fileId < 0 || fileId >= this.fileContentCache[groupId].length) {
-            return null;
+    public writeFile(groupId: number, fileId: number, data: Uint8Array, keys?: Int32Array) {
+        const group = this.getOrCreateGroupMetadata(groupId, undefined, keys);
+        const file: FileMetadata = {
+            id: fileId,
+            size: data.length,
+            content: data
+        };
+
+        if (!group.files.has(fileId)) {
+            group.size++;
         }
 
-        if (this.fileContentCache[groupId][fileId] == null) {
-            let loaded = this.decodeGroup(groupId, xteaKeys);
-            if (!loaded) {
-                this.requestGroup(groupId);
-                loaded = this.decodeGroup(groupId, xteaKeys);
-                if (!loaded) {
-                    return null;
-                }
-            }
-        }
-        return this.fileContentCache[groupId][fileId];
+        group.requiresPacking = true;
+        group.files.set(fileId, file);
     }
 
-    public decodeGroup(groupId: number, xteaKeys?: Uint32Array): boolean {
-        if (this.groupContentCache[groupId] == null) {
-            return false;
+    public writeNamedGroup(groupId: number, groupName: string, fileId: number, data: Uint8Array, keys?: Int32Array) {
+        const group = this.getOrCreateGroupMetadata(groupId, groupName, keys);
+        const file: FileMetadata = {
+            id: fileId,
+            size: data.length,
+            content: data
+        };
+
+        if (group.size == 0) {
+            group.size++;
         }
 
-        const groupSize = this.groupSizes[groupId];
-        const groupFileData = this.fileContentCache[groupId];
-        const groupFileIds = this.fileIds[groupId];
+        group.requiresPacking = true;
+        group.files.set(fileId, file);
+    }
 
-        let allFilesPresent = true;
-        for (let i = 0; i < groupSize; i++) {
-            if (groupFileData[groupFileIds[i]] == null) {
-                allFilesPresent = false;
-                break;
+    public unpack() {
+        if (this._isMetadataLoaded) {
+            return;
+        }
+
+        this.decodeMetadata();
+    }
+
+    public pack() {
+        this.groups.forEach(group => {
+            if (!group.requiresPacking) {
+                return;
             }
+
+            const encodedGroup = this.encodeGroup(group);
+            const written = this.dataIndex.write(encodedGroup, group.id, encodedGroup.length);
+            if (!written) {
+                throw new Error(`Failed to write group ${group.id} to archive ${this.index}`);
+            }
+        });
+
+        const encodedMetadata = this.encodeMetadata();
+        const written = this.idx255.write(encodedMetadata, this.index, encodedMetadata.length);
+        if (!written) {
+            throw new Error(`Failed to write metadata for archive ${this.index}`);
+        }
+    }
+
+    private encodeGroup(group: GroupMetadata): Uint8Array {
+        if (group.files.size === 0) {
+            throw new Error(`Group ${group.id} does not contain any files.`);
         }
 
-        if (allFilesPresent) {
-            return true;
+        // If there's only one file, bypass encoding for simplicity
+        if (group.files.size === 1) {
+            const singleFile = [...group.files.values()][0];
+            if (singleFile.content == null) {
+                throw new Error(`File content missing for group ${group.id} file ${singleFile.id}`);
+            }
+            return singleFile.content; // Return the raw file content directly
+        }
+
+        // Step 1: Gather file contents and calculate sizes
+        const fileContents = [...group.files.values()].map(file => {
+            if (!file.content) {
+                throw new Error(`File content missing for group ${group.id} file ${file.id}`);
+            }
+            return file.content;
+        });
+
+        const fileSizes = fileContents.map(content => content.length);
+        const totalSize = fileSizes.reduce((sum, size) => sum + size, 0);
+
+        // Step 2: Encode size deltas and stripe data
+        const stripeCount = 1; // Assuming one stripe
+        const sizeDeltas = new Array(group.size * stripeCount).fill(0);
+        let cumulativeSize = 0;
+
+        for (let i = 0; i < group.size; i++) {
+            sizeDeltas[i] = fileSizes[i] - cumulativeSize;
+            cumulativeSize = fileSizes[i]; // Accumulate current size
+        }
+
+        // Step 3: Write the data to a packet
+        const packet = new Packet(new Uint8Array(totalSize + 4 * sizeDeltas.length + 1));
+        packet.pos = 0;
+
+        // Write the file data sequentially
+        fileContents.forEach(content => packet.pdata(content, 0, content.length));
+
+        // Write the size deltas at the end of the packet
+        for (const delta of sizeDeltas) {
+            packet.p4(delta); // Write 4 bytes for delta
+        }
+
+        packet.p1(stripeCount); // Write stripe count at the very end
+
+        // Step 4: Compress the data
+        const compressedData = Js5Archive.compress(packet.data.subarray(0, packet.pos));
+
+        // Step 5: Encrypt if keys are provided
+        if (group.keys && group.keys[0] !== 0 && group.keys[1] !== 0 && group.keys[2] !== 0 && group.keys[3] !== 0) {
+            const encryptedData = new Uint8Array(compressedData.length);
+            copyBytes(compressedData, 0, encryptedData, 0, compressedData.length);
+
+            const encryptionPacket = new Packet(encryptedData);
+            // encryptionPacket.encrypt(keys, 5, encryptionPacket.length);
+
+            return encryptionPacket.data;
+        }
+
+        group.checksum = Packet.getcrc(compressedData, 0, compressedData.length);
+        return compressedData; // Return the compressed and optionally encrypted data
+    }
+
+    private decodeGroup(group: GroupMetadata, keys?: Int32Array) {
+        const data = this.dataIndex.read(group.id);
+        if (data == null) {
+            throw new Error(`Archive ${this.index} Group ${group.id} not found`);
         }
 
         let compressedData: Uint8Array;
-        if (xteaKeys == null || xteaKeys[0] == 0 && xteaKeys[1] == 0 && xteaKeys[2] == 0 && xteaKeys[3] == 0) {
-            compressedData = this.groupContentCache[groupId];
-        }
-        else {
-            compressedData = new Uint8Array(this.groupContentCache[groupId].length);
-            copyBytes(this.groupContentCache[groupId], 0, compressedData, 0, compressedData.length);
+        if (keys != null && keys[0] != 0 && keys[1] != 0 && keys[2] != 0 && keys[3] != 0) {
+            compressedData = new Uint8Array(data.length);
+            copyBytes(data, 0, compressedData, 0, data.length);
 
             const packet = new Packet(compressedData);
-            packet.decrypt(xteaKeys, 5, packet.length);
+            packet.decrypt(keys, 5, packet.length);
+        } else {
+            compressedData = data;
         }
 
         const decompressedData = Js5Archive.decompress(compressedData);
 
-        if (groupSize < 1) {
-            groupFileData[groupFileIds[0]] = decompressedData;
-            return true;
+        if (group.size < 1) {
+            const file = [...group.files.values()][0];
+            file.content = decompressedData;
+            return;
         }
-
-        let dataLength = decompressedData.length;
-        const stripeCount = decompressedData[--dataLength] & 0xff;
 
         const packet = new Packet(decompressedData);
-        dataLength -= 4 * stripeCount * groupSize;
-        packet.pos = dataLength;
+        const stripeCount = decompressedData[decompressedData.length - 1] & 0xff;
 
-        const fileSizes = new Uint32Array(groupSize);
-        for (let stripe = 0; stripeCount > stripe; stripe++) {
-            let currentLength = 0;
-            for (let f = 0; f < groupSize; f++) {
-                const delta = packet.g4();
+        const fileSizes = new Array(group.size).fill(0);
+        packet.pos = decompressedData.length - 1 - 4 * stripeCount * group.size;
 
-                currentLength += delta;
-                fileSizes[f] += currentLength;
+        for (let stripe = 0; stripe < stripeCount; stripe++) {
+            let cumulativeSize = 0;
+            for (let i = 0; i < group.size; i++) {
+                const delta = packet.g4(); // Read file size delta
+                fileSizes[i] += cumulativeSize += delta;
             }
         }
 
-        for (let f = 0; f < groupSize; f++) {
-            if(groupFileData[groupFileIds[f]] == null)
-                groupFileData[groupFileIds[f]] = new Uint8Array(fileSizes[f]);
+        // Distribute file data
+        packet.pos = 0;
+        for (let i = 0; i < group.size; i++) {
+            const file = [...group.files.values()][i];
+            file.content = decompressedData.subarray(packet.pos, (packet.pos += fileSizes[i]));
+        }
+    }
 
-            fileSizes[f] = 0;
+    private encodeMetadata(): Uint8Array {
+        const packet = Packet.alloc(4);
+
+        // TODO support other protocols
+        packet.p1(Js5Protocol.Original);
+        packet.p1(this.isNamed ? 1 : 0);
+        packet.p2(this.groups.size);
+
+        // sort groups as group ids are written via deltas
+        const sortedGroups = [...this.groups.keys()].sort((a, b) => a - b);
+
+        // write group id deltas
+        for (let i = 0; i < sortedGroups.length; i++) {
+            let groupDelta = sortedGroups[i];
+            if (i != 0) {
+                groupDelta -= sortedGroups[i - 1];
+            }
+            packet.p2(groupDelta);
         }
 
-        packet.pos = dataLength;
-        let decompressedDataPointer = 0;
-        for (let stripe = 0; stripeCount > stripe; stripe++) {
-            let size = 0;
-            for (let f = 0; f < groupSize; f++) {
-                const stripeLength = fileSizes[f];
-
-                const delta = packet.g4();
-                size += delta;
-
-                copyBytes(decompressedData, decompressedDataPointer, groupFileData[groupFileIds[f]], stripeLength, size);
-                fileSizes[f] += size;
-                decompressedDataPointer += size;
+        // write group names
+        if (this.isNamed) {
+            for (const groupId of sortedGroups) {
+                const group = this.getGroupMetadata(groupId);
+                if (!group.nameHash) {
+                    throw new Error(`Archive ${this.index} Group ${groupId} does not have a name`);
+                }
+                packet.p4(group.nameHash);
             }
         }
 
-        return true;
-    }
-
-    private requestGroup(groupId: number) {
-        const data = this.dataIndex.read(groupId);
-        if (data == null) {
-            throw new Error(`Archive ${this.index} Group ${groupId} not found`);
+        // write group checksums
+        for (const groupId of sortedGroups) {
+            const group = this.getGroupMetadata(groupId);
+            packet.p4(group.checksum);
         }
 
-        this.groupContentCache[groupId] = data;
+        // write group versions
+        for (const groupId of sortedGroups) {
+            const group = this.getGroupMetadata(groupId);
+            packet.p4(group.version);
+        }
+
+        // write group sizes
+        for (const groupId of sortedGroups) {
+            const group = this.getGroupMetadata(groupId);
+            packet.p2(group.size);
+        }
+
+        // write group file id deltas
+        for (const groupId of sortedGroups) {
+            const group = this.getGroupMetadata(groupId);
+            const sortedFiles = [...group.files.keys()].sort((a, b) => a - b);
+
+            for (let i = 0; i < group.size; i++) {
+                let delta = sortedFiles[i];
+                if (i != 0) {
+                    delta -= sortedFiles[i - 1];
+                }
+                packet.p2(delta);
+            }
+        }
+
+        // write file names
+        if (this.isNamed) {
+            for (const groupId of sortedGroups) {
+                const group = this.getGroupMetadata(groupId);
+                const sortedFiles = [...group.files.keys()].sort((a, b) => a - b);
+
+                for (const fileId of sortedFiles) {
+                    const file = group.files.get(fileId);
+                    if (!file) {
+                        throw new Error(`Archive ${this.index} Group ${groupId} File ${fileId} not found`);
+                    }
+
+                    if (!file.nameHash) {
+                        throw new Error(`Archive ${this.index} Group ${groupId} File ${fileId} does not have a name`);
+                    }
+
+                    packet.p4(file.nameHash);
+                }
+            }
+        }
+
+        return Js5Archive.compress(packet.data.subarray(0, packet.pos));
     }
 
-    public decodeMetadata() {
+    private decodeMetadata() {
         const data = this.idx255.read(this.index);
         if (data == null) {
             throw new Error('No metadata found for archive ' + this.index);
@@ -164,86 +339,160 @@ export default class Js5Archive {
             throw new Error(`Invalid protocol: ${protocol}`);
         }
 
-        const hasNames = packet.g1();
+        const hasNames = packet.g1() != 0;
 
+        // Read group size
         this.size = packet.g2();
-        this.groupIds = new Uint32Array(this.size);
-
         let previousGroupId = 0;
-        let highestGroupId = -1;
-        for (let index = 0; this.size > index; index++) {
-            this.groupIds[index] = previousGroupId += packet.g2();
-            if (this.groupIds[index] > highestGroupId) {
-                highestGroupId = this.groupIds[index];
+
+        const groupIds: number[] = [];
+
+        let groupId: number;
+        for (let i = 0; i < this.size; i++) {
+            groupId = previousGroupId += packet.g2();
+            groupIds.push(groupId);
+
+            this.groups.set(groupId, {
+                id: groupId,
+                checksum: 0,
+                version: 0,
+                size: 0,
+                files: new Map(),
+                isLoaded: false
+            });
+        }
+
+        let group: GroupMetadata;
+
+        // group names
+        if (hasNames) {
+            for (let i = 0; i < this.size; i++) {
+                groupId = groupIds[i];
+                group = this.getGroupMetadata(groupId);
+                group.nameHash = packet.g4();
             }
         }
 
-        this.groupVersions = new Uint32Array(highestGroupId + 1);
-        this.groupChecksums = new Uint32Array(highestGroupId + 1);
-        this.groupSizes = new Uint32Array(highestGroupId + 1);
-        this.fileIds = new Array(highestGroupId + 1);
-        this.fileContentCache = new Array(highestGroupId + 1);
-        this.groupContentCache = new Array(highestGroupId + 1);
-
-        if (hasNames != 0) {
-            this.nameHashes = new Uint32Array(highestGroupId + 1);
-
-            for (let i = 0; this.size > i; i++) {
-                const groupId = this.groupIds[i];
-                this.nameHashes[groupId] = packet.g4();
-            }
-
-            this.groupNames = new NameHashCollection(this.nameHashes);
-        }
-
+        // group checksum
         for (let i = 0; i < this.size; i++) {
-            this.groupChecksums[this.groupIds[i]] = packet.g4();
+            groupId = groupIds[i];
+            group = this.getGroupMetadata(groupId);
+
+            group.checksum = packet.g4();
         }
 
+        // group version
         for (let i = 0; i < this.size; i++) {
-            this.groupVersions[this.groupIds[i]] = packet.g4();
+            groupId = groupIds[i];
+            group = this.getGroupMetadata(groupId);
+
+            group.version = packet.g4();
         }
 
-        for (let i = 0; this.size > i; i++) {
-            this.groupSizes[this.groupIds[i]] = packet.g2();
-        }
-
+        // group size
         for (let i = 0; i < this.size; i++) {
-            const groupId = this.groupIds[i];
-            const groupSize = this.groupSizes[groupId];
-            this.fileIds[groupId] = new Uint32Array(groupSize);
+            groupId = groupIds[i];
+            group = this.getGroupMetadata(groupId);
+
+            group.size = packet.g2();
+        }
+
+        // group file ids
+        for (let i = 0; i < this.size; i++) {
+            groupId = groupIds[i];
+            group = this.getGroupMetadata(groupId);
 
             let previousFileId = 0;
-            let highestFileId = -1;
-
-            for (let fileId = 0; groupSize > fileId; fileId++) {
-                this.fileIds[groupId][fileId] = previousFileId += packet.g2();
-
-                if (this.fileIds[groupId][fileId] > highestFileId) {
-                    highestFileId = this.fileIds[groupId][fileId];
-                }
-            }
-
-            this.fileContentCache[groupId] = new Array(highestFileId + 1);
-        }
-
-        if (hasNames != 0) {
-            this.fileNames = new Array(highestGroupId + 1);
-            this.fileNameHashes = new Array(highestGroupId + 1);
-
-            for (let i = 0; this.size > i; i++) {
-                const groupId = this.groupIds[i];
-                const groupSize = this.groupSizes[groupId];
-
-                this.fileNameHashes[groupId] = new Uint32Array(this.fileContentCache[groupId].length);
-
-                for (let fileId = 0; groupSize > fileId; fileId++) {
-                    this.fileNameHashes[groupId][this.fileIds[groupId][fileId]] = packet.g4();
-                }
-
-                this.fileNames[groupId] = new NameHashCollection(this.fileNameHashes[groupId]);
+            for (let j = 0; group.size > j; j++) {
+                const fileId = (previousFileId += packet.g2());
+                group.files.set(fileId, {
+                    id: fileId,
+                    size: 0,
+                    content: null,
+                    nameHash: undefined
+                });
             }
         }
+
+        // group file names
+        if (hasNames) {
+            for (let i = 0; i < this.size; i++) {
+                const groupId = groupIds[i];
+                const group = this.getGroupMetadata(groupId);
+
+                group.nameHash = packet.g4();
+                [...group.files.values()].forEach(file => {
+                    file.nameHash = packet.g4();
+                });
+            }
+        }
+
+        this._isMetadataLoaded = true;
+    }
+
+    private getGroupMetadata(groupId: number, loadGroup: boolean = false): GroupMetadata {
+        // TODO support getting groups by name
+        const group = this.groups.get(groupId);
+        if (group == null) {
+            throw new Error(`Group ${groupId} not found`);
+        }
+
+        if (!group.isLoaded && loadGroup) {
+            this.decodeGroup(group);
+        }
+        return group;
+    }
+
+    private getOrCreateGroupMetadata(groupId: number, groupName?: string, keys?: Int32Array): GroupMetadata {
+        // TODO support getting groups by name
+        let group = this.groups.get(groupId);
+        if (group == null) {
+            group = {
+                id: groupId,
+                checksum: 0,
+                version: 1,
+                size: 0,
+                files: new Map(),
+                isLoaded: true
+            };
+
+            if (groupName) {
+                group.nameHash = genHash(groupName);
+            }
+
+            this.groups.set(groupId, group);
+        }
+        group.keys = keys;
+
+        if (!group.isLoaded) {
+            this.decodeGroup(group, keys);
+        }
+
+        return group;
+    }
+
+    public static compress(cacheData: Uint8Array, type: number = 1) {
+        const packet = Packet.alloc(4);
+
+        packet.p1(type);
+
+        if (type == 0) {
+            packet.p4(cacheData.length);
+            packet.pdata(cacheData, 0, cacheData.length);
+            return packet.data;
+        }
+
+        let compressed: Uint8Array;
+        if (type == 1) {
+            compressed = BZip2.compress(cacheData, true);
+        } else {
+            // TODO support gzip compression
+            throw new Error(`Unsupported compression type: ${type}`);
+        }
+
+        packet.p4(compressed.length);
+        packet.pdata(compressed, 0, compressed.length);
+        return packet.data.subarray(0, packet.pos);
     }
 
     public static decompress(cacheData: Uint8Array): Uint8Array {

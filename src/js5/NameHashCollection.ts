@@ -1,14 +1,14 @@
 export default class NameHashCollection {
     public static readonly NOT_FOUND: number = -1;
 
-    private readonly _hashTable: Uint32Array;
+    private readonly _hashTable: Int32Array;
 
     constructor(hashTable: Uint32Array) {
         const size = NameHashCollection.calculateInitialSize(hashTable.length);
-        this._hashTable = new Uint32Array(size * 2);
+        this._hashTable = new Int32Array(size * 2);
 
         for (let i = 0; this._hashTable.length > i; i++) {
-            this._hashTable[i] = -1;
+            this._hashTable[i] = NameHashCollection.NOT_FOUND;
         }
 
         this.populateHashTable(size, hashTable);
