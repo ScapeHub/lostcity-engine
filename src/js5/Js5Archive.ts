@@ -30,7 +30,7 @@ export default class Js5Archive {
     public idx255: Js5Index;
     public dataIndex: Js5Index;
     public checksum: number = 0;
-    public crc8: number = 0;
+    private _crc8: number = 0;
     public size: number = 0;
     public isNamed: boolean = false;
 
@@ -45,6 +45,14 @@ export default class Js5Archive {
         this.dataIndex = dataIndex;
     }
 
+    public get crc(): number {
+        if (!this._isMetadataLoaded) {
+            this.decodeMetadata();
+        }
+
+        return this._crc8;
+    }
+
     public listGroupFiles(groupId: number, keys?: Int32Array): MapIterator<FileMetadata> {
         const group = this.getGroupMetadata(groupId, true, keys);
         return group.files.values();
@@ -53,6 +61,14 @@ export default class Js5Archive {
     public listGroupIds(): number[] {
         const groups = [...this.groups.values()];
         return groups.map(group => group.id);
+    }
+
+    public getGroupData(groupId: number): Uint8Array | null {
+        if (!this._isMetadataLoaded) {
+            this.decodeMetadata();
+        }
+
+        return this.dataIndex.read(groupId);
     }
 
     public readFile(groupId: number, fileId: number, keys?: Int32Array): Uint8Array {
@@ -406,7 +422,7 @@ export default class Js5Archive {
             throw new Error('No metadata found for archive ' + this.index);
         }
 
-        this.crc8 = Packet.calculateCrc8(0, data.length, data);
+        this._crc8 = Packet.getcrc(data, 0, data.length);
         const packet = new Packet(Js5Archive.decompress(data));
 
         const protocol = packet.g1();
@@ -548,14 +564,11 @@ export default class Js5Archive {
         let compressed: Uint8Array;
         if (type == 0) {
             compressed = cacheData;
-        }
-        else if (type == 1) {
+        } else if (type == 1) {
             compressed = BZip2.compress(cacheData, false, true);
-        }
-        else if (type == 2) {
+        } else if (type == 2) {
             compressed = gzipCompress(cacheData, 9, cacheData.length);
-        }
-        else {
+        } else {
             throw new Error(`Invalid compression type: ${type}`);
         }
 
@@ -592,8 +605,7 @@ export default class Js5Archive {
 
             try {
                 packet.p2(group.version);
-            }
-            catch (e) {
+            } catch (e) {
                 console.log('failed to write group version:', e);
             }
         }

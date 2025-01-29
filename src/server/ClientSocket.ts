@@ -22,6 +22,9 @@ export default abstract class ClientSocket {
     opcode = -1; // current opcode being read
     waiting = 0; // bytes to wait for (if any)
 
+    prefetchLimit: number = 0;
+    urgentLimit: number = 0;
+
     buffer(data: Buffer) {
         if (data.length + this.in.pos > this.in.length) {
             this.close();

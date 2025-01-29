@@ -33,7 +33,7 @@ import { CrcBuffer32, makeCrcs, makeCrcsAsync } from '#/cache/CrcTable.js';
 import { preloadClient, preloadClientAsync } from '#/cache/PreloadedPacks.js';
 
 import { CoordGrid } from '#/engine/CoordGrid.js';
-import GameMap, {changeLocCollision, changeNpcCollision, changePlayerCollision} from '#/engine/GameMap.js';
+import GameMap, { changeLocCollision, changeNpcCollision, changePlayerCollision } from '#/engine/GameMap.js';
 import { Inventory } from '#/engine/Inventory.js';
 import WorldStat from '#/engine/WorldStat.js';
 
@@ -72,7 +72,21 @@ import Environment from '#/util/Environment.js';
 import { printDebug, printError, printInfo } from '#/util/Logger.js';
 import { createWorker } from '#/util/WorkerFactory.js';
 import HuntModeType from '#/engine/entity/hunt/HuntModeType.js';
-import { trackCycleBandwidthInBytes, trackCycleBandwidthOutBytes, trackCycleClientInTime, trackCycleClientOutTime, trackCycleLoginTime, trackCycleLogoutTime, trackCycleNpcTime, trackCyclePlayerTime, trackCycleTime, trackCycleWorldTime, trackCycleZoneTime, trackNpcCount, trackPlayerCount } from '#/server/Metrics.js';
+import {
+    trackCycleBandwidthInBytes,
+    trackCycleBandwidthOutBytes,
+    trackCycleClientInTime,
+    trackCycleClientOutTime,
+    trackCycleLoginTime,
+    trackCycleLogoutTime,
+    trackCycleNpcTime,
+    trackCyclePlayerTime,
+    trackCycleTime,
+    trackCycleWorldTime,
+    trackCycleZoneTime,
+    trackNpcCount,
+    trackPlayerCount
+} from '#/server/Metrics.js';
 import WalkTriggerSetting from '#/util/WalkTriggerSetting.js';
 import LinkList from '#/util/LinkList.js';
 import { fromBase37, toBase37, toSafeName } from '#/util/JString.js';
@@ -80,6 +94,8 @@ import { PlayerLoading } from '#/engine/entity/PlayerLoading.js';
 import ScriptPointer from '#/engine/script/ScriptPointer.js';
 import Isaac from '#/io/Isaac.js';
 import LoggerEventType from '#/server/logger/LoggerEventType.js';
+import Js5UpdateServer from '#/js5/Js5UpdateServer.js';
+import Js5 from '#/js5/Js5.js';
 
 const priv = forge.pki.privateKeyFromPem(
     Environment.STANDALONE_BUNDLE ?
@@ -1803,6 +1819,14 @@ class World {
 
     static loginBuf = Packet.alloc(1);
 
+    secureRandomLong(): bigint {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        const crypto = require('crypto'); // Built-in Node.js module
+        const randomBuffer = crypto.randomBytes(8); // 8 bytes = 64-bit
+        // Read as signed 64-bit integer (big-endian)
+        return randomBuffer.readBigInt64BE();
+    }
+
     onClientData(client: ClientSocket) {
         if (client.state !== 0) {
             // connection negotiation only
@@ -1819,31 +1843,77 @@ class World {
 
             // todo: login encoders/decoders
             client.opcode = World.loginBuf.g1();
-            client.waiting = client.opcode === 16 || client.opcode === 18 ? -1 : 0;
+
+            console.log('handshake opcode: ' + client.opcode);
+
+            client.waiting = client.opcode == 15 ? -4 : client.opcode == 14 ? -5 : 0;
+            // client.waiting = client.opcode === 16 || client.opcode === 18 ? -1 : 0;
         }
 
-        if (client.waiting === -1) {
+        if (client.waiting === -4) {
+            console.log('read js5 rev');
             World.loginBuf.pos = 0;
-            client.read(World.loginBuf.data, 0, 1);
+            client.read(World.loginBuf.data, 0, 4);
 
-            client.waiting = World.loginBuf.g1();
-        } else if (client.waiting === -2) {
-            World.loginBuf.pos = 0;
-            client.read(World.loginBuf.data, 0, 2);
+            const revision = World.loginBuf.g4();
+            console.log('js5 rev: ' + revision);
+            if (revision !== 22) {
+                client.send(Uint8Array.from([ 6 ]));
+                client.close();
+                return;
+            }
 
-            client.waiting = World.loginBuf.g2();
-        }
-
-        if (client.available < client.waiting) {
+            console.log('js5 rev ok');
+            client.opcode = -1;
+            client.waiting = 0;
+            Js5UpdateServer.addClient(client);
             return;
         }
 
-        World.loginBuf.pos = 0;
-        client.read(World.loginBuf.data, 0, client.waiting);
+        if (client.waiting === -5) {
+            console.log('read login');
+            World.loginBuf.pos = 0;
+            client.read(World.loginBuf.data, 0, 1);
+            World.loginBuf.g1();
+            const worldKey = this.secureRandomLong();
+            const packet = Packet.allocDirect(9);
+            packet.p1(0);
+            packet.p8(worldKey);
+            client.send(packet.data);
 
+            client.waiting = -3;
+            return;
+        }
+
+        if (client.waiting === -3) {
+            console.log(`read world key, avail=${client.available}`);
+            World.loginBuf.pos = 0;
+            client.read(World.loginBuf.data, 0, client.available);
+
+            client.opcode = World.loginBuf.g1();
+            client.waiting = client.opcode === 16 || client.opcode === 18 ? -1 : 0;
+            console.log('read login opcode: ' + client.opcode);
+        }
+
+        if (client.waiting === -1) {
+            // client.read(World.loginBuf.data, 1, client.available);
+
+            client.waiting = World.loginBuf.g1();
+            console.log('read login opcode: ' + client.opcode +', size='+ client.waiting +', available='+ client.available);
+        }
+
+        if (World.loginBuf.available < client.waiting) {
+            console.log('waiting for more data.. avail='+ client.available +', waiting='+ client.waiting);
+            return;
+        }
+
+        // World.loginBuf.pos = 0;
+        // client.read(World.loginBuf.data, 2, client.waiting);
+        console.log('read login packet, opcode='+ client.opcode);
         if (client.opcode === 16 || client.opcode === 18) {
-            const rev = World.loginBuf.g1();
-            if (rev !== 225) {
+            const rev = World.loginBuf.g4();
+            console.log('login rev: ' + rev);
+            if (rev !== 22) {
                 client.send(Uint8Array.from([ 6 ]));
                 client.close();
                 return;
@@ -1852,19 +1922,24 @@ class World {
             const info = World.loginBuf.g1();
             const lowMemory = (info & 0x1) !== 0;
 
-            const crcs = new Uint8Array(9 * 4);
-            World.loginBuf.gdata(crcs, 0, crcs.length);
+            const crcs = new Uint8Array(12 * 4);
+            // World.loginBuf.gdata(crcs, 0, crcs.length);
 
-            if (CrcBuffer32 !== Packet.getcrc(crcs, 0, crcs.length)) {
-                client.send(Uint8Array.from([ 6 ]));
-                client.close();
-                return;
+            for (let i = 0; i < 12; i++) {
+                const expectedCrc = World.loginBuf.g4();
+                if (expectedCrc != Js5.cache.archives[i].crc) {
+                    console.log(`invalid js5 crc for archive ${i}, expected ${expectedCrc}, got ${Js5.cache.archives[i].crc}`);
+                    client.send(Uint8Array.from([ 6 ]));
+                    client.close();
+                    return;
+                }
             }
 
-            World.loginBuf.rsadec(priv);
+            World.loginBuf.decryptRsa();
 
             if (World.loginBuf.g1() !== 10) {
                 // RSA error
+                console.log('RSA error');
                 client.send(Uint8Array.from([ 11 ]));
                 client.close();
                 return;
@@ -1882,8 +1957,12 @@ class World {
             client.encryptor = new Isaac(seed);
 
             const uid = World.loginBuf.g4();
-            const username = World.loginBuf.gjstr();
-            const password = World.loginBuf.gjstr();
+            const usernameHash = World.loginBuf.g8();
+            const password = World.loginBuf.gstr();
+
+            const username = fromBase37(usernameHash);
+
+            console.log(`[World] login: username=${username}, password-${password}, uid=${uid}, lowMemory=${lowMemory}`);
 
             // todo: record login attempt?
 
@@ -1913,6 +1992,8 @@ class World {
             }
 
             const safeName = toSafeName(username);
+
+            console.log(`[World] login: username=${username}, safeName=${safeName}, password-${password}, uid=${uid}, lowMemory=${lowMemory}`);
 
             this.loginRequests.set(client.uuid, client);
             this.loginThread.postMessage({

@@ -23,10 +23,12 @@ export default class TcpServer {
             const client = new TcpClientSocket(s, s.remoteAddress ?? 'unknown');
 
             // todo: connection negotiation feature flag
-            const seed = new Packet(new Uint8Array(8));
-            seed.p4(Math.floor(Math.random() * 0xffffffff));
-            seed.p4(Math.floor(Math.random() * 0xffffffff));
-            client.send(seed.data);
+            // const seed = new Packet(new Uint8Array(8));
+            // seed.p4(Math.floor(Math.random() * 0xffffffff));
+            // seed.p4(Math.floor(Math.random() * 0xffffffff));
+            // client.send(seed.data);
+            // client.state = 0;
+
             client.state = 0;
 
             s.on('data', (data: Buffer) => {

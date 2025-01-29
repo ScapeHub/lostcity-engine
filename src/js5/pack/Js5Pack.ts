@@ -39,6 +39,8 @@ export async function packJs5() {
     packNamedEncryptedBinaryGroupFiles(js5.worldMapArchive, 'map', MapPack, keys);
 
     writeKeys(keys);
+
+    js5.close();
 }
 
 function generateKeys(secureRandom: () => number = () => Math.floor(Math.random() * 2 ** 32)): Int32Array {

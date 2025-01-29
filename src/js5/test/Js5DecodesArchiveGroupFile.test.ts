@@ -18,6 +18,16 @@ describe('GetInvGroupFileSizes', () => {
     });
 });
 
+describe('GetMetadata', () => {
+    it('loads cache files and checks metadata', () => {
+        Js5.open('./data/cache/packed', 12);
+
+        const data = Js5.cache.getGroupData(255, 255);
+        console.log(data?.length);
+    });
+});
+
+
 describe('Js5DecodesArchiveGroupFile', () => {
     it('loads cache and decodes archive group file', () => {
         const js5 = new Js5('./data/cache/packed', 12);

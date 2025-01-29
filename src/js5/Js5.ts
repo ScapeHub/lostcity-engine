@@ -2,8 +2,11 @@ import Js5Archive from '#/js5/Js5Archive.js';
 import RandomAccessFile from '#/util/RandomAccessFile.js';
 import Js5FileChannel from '#/js5/Js5FileChannel.js';
 import Js5Index from '#/js5/Js5Index.js';
+import Packet from '#/io/Packet.js';
 
 export default class Js5 {
+    public static cache: Js5;
+
     private readonly _dataFile: RandomAccessFile;
     private readonly _indexFiles: RandomAccessFile[];
     private readonly _metadataFile: RandomAccessFile;
@@ -42,6 +45,33 @@ export default class Js5 {
         for (let i = 0; i < indexCount; i++) {
             this.archives[i] = this.loadArchive(i);
         }
+    }
+
+    public static open(directory: string, indexCount: number = 12) {
+        if (Js5.cache) {
+            throw new Error('Js5 cache already open.');
+        }
+        Js5.cache = new Js5(directory, indexCount);
+    }
+
+    public getGroupData(archiveId: number, groupId: number): Uint8Array | null {
+        if (archiveId < 0 || (archiveId >= this.archives.length && archiveId !== 255)) {
+            throw new Error('Invalid archive id. Must be between 0 and ' + (this.archives.length - 1) + '. Requested ' + archiveId + '.');
+        }
+
+        if (archiveId === 255) {
+            return this._metadataIndex.read(groupId);
+        }
+
+        return this.archives[archiveId].getGroupData(groupId);
+    }
+
+    public getReferenceData(): Uint8Array {
+        const packet = Packet.allocDirect(this.archives.length * 4);
+        for (let i = 0; i < this.archives.length; i++) {
+            packet.p4(this.archives[i].crc);
+        }
+        return packet.data.subarray(0, packet.pos);
     }
 
     public pack(): void {

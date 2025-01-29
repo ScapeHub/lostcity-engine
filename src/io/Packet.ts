@@ -44,18 +44,29 @@ export default class Packet extends DoublyLinkable {
             this.crctable[b] = remainder;
         }
 
-        for (let b = 0; b < 256; b++) {
-            let currentByte = b;
-            for (let bit = 0; bit < 8; bit++) {
-                if ((currentByte & 0x1) != 1) {
-                    currentByte >>>= 1;
-                }
-                else {
-                    currentByte = -306674912 ^ currentByte >>> 1;
-                }
+        for (let i = 0; i < 256; i++) {
+            let i_2_ = i;
+            for (let i_3_ = 0; i_3_ < 8; i_3_++) {
+                if ((0x1 & i_2_) == 1)
+                    i_2_ = ~0x12477cdf ^ i_2_ >>> 1;
+                else
+                    i_2_ >>>= 1;
             }
-            this.crc8Table[b] = currentByte;
+            this.crc8Table[i] = i_2_;
         }
+
+        // for (let b = 0; b < 256; b++) {
+        //     let currentByte = b;
+        //     for (let bit = 0; bit < 8; bit++) {
+        //         if ((currentByte & 0x1) != 1) {
+        //             currentByte >>>= 1;
+        //         }
+        //         else {
+        //             currentByte = -306674912 ^ currentByte >>> 1;
+        //         }
+        //     }
+        //     this.crc8Table[b] = currentByte;
+        // }
     }
 
     static getcrc(src: Uint8Array, offset: number, length: number): number {
@@ -67,13 +78,18 @@ export default class Packet extends DoublyLinkable {
     }
 
     static calculateCrc8(offset: number, size: number, data: Uint8Array) {
-        let crc = -1;
-        for (let currentByte = offset; currentByte < size; currentByte++) {
-            const tableIndex = 0xff & (crc ^ data[currentByte]);
-            crc = this.crc8Table[tableIndex] ^ crc >>> 8;
-        }
-        crc ^= 0xffffffff;
-        return crc;
+        // let crc = -1;
+        // for (let currentByte = offset; currentByte < size; currentByte++) {
+        //     const tableIndex = 0xff & (crc ^ data[currentByte]);
+        //     crc = this.crc8Table[tableIndex] ^ crc >>> 8;
+        // }
+        // crc ^= 0xffffffff;
+        // return crc;
+        let i = -1;
+        for (let i_0_ = offset; size > i_0_; i_0_++)
+            i = (this.crc8Table[(data[i_0_] ^ i) & 0xff] ^ i >>> 8);
+        i ^= 0xffffffff;
+        return i;
     }
 
     static checkcrc(src: Uint8Array, offset: number, length: number, expected: number = 0): boolean {
@@ -501,6 +517,20 @@ export default class Packet extends DoublyLinkable {
         const m2: BigInteger = bigRaw.mod(q).modPow(dQ, q);
         const h: BigInteger = qInv.multiply(m1.subtract(m2)).mod(p);
         const rawDec: Uint8Array = new Uint8Array(m2.add(h.multiply(q)).toByteArray());
+
+        this.pos = 0;
+        this.pdata(rawDec, 0, rawDec.length);
+        this.pos = 0;
+    }
+
+    decryptRsa() {
+        const enc: Uint8Array = new Uint8Array(this.g1());
+        this.gdata(enc, 0, enc.length);
+
+        const priv = new BigInteger('29924057376438319634135291571860764254212463285121364647897876927729602583579790593885798735367937838048520043836050106965161417481519080077486831162573012077766520146971306365978824155454584138093226634219375631513101573929666983945292261890683204090065170492932504009306221754367354953047278772987290681473');
+        const mod = new BigInteger('97268770373952889289868296981700173937522180652564173937569842288097161220120461072884316621357431906169321402285647051888492402414756271750731795154327343085309657521413898547833222609589016281680364983494039463052157758195264714977003330170342275861446288164237078327275026642761244627967386006471318506197');
+        const bigRaw: BigInteger = new BigInteger(Array.from(enc));
+        const rawDec = new Uint8Array(bigRaw.modPow(priv, mod).toByteArray());
 
         this.pos = 0;
         this.pdata(rawDec, 0, rawDec.length);
