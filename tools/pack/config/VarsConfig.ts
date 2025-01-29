@@ -51,8 +51,7 @@ export function parseVarsConfig(key: string, value: string): ConfigValue | null 
     }
 }
 
-export function packVarsConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(VarsPack.size);
+export function packVarsConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(VarsPack.size);
 
     for (let i = 0; i < VarsPack.size; i++) {
@@ -71,9 +70,8 @@ export function packVarsConfigs(configs: Map<string, ConfigLine[]>): { client: P
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

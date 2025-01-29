@@ -7,8 +7,10 @@ import NpcMode from '#/engine/entity/NpcMode.js';
 import { ParamValue, ConfigValue, ConfigLine, PackedData, isConfigBoolean, getConfigBoolean } from '#tools/pack/config/PackShared.js';
 import { lookupParamValue } from '#tools/pack/config/ParamConfig.js';
 import BlockWalk from '#/engine/entity/BlockWalk.js';
-import { CategoryPack, HuntPack, ModelPack, NpcPack, SeqPack } from '#/util/PackFile.js';
+import { CategoryPack, HuntPack, ModelPack, NpcPack, SeqPack, VarbitPack, VarpPack } from '#/util/PackFile.js';
 import ColorConversion from '#/util/ColorConversion.js';
+import Packet from '#/io/Packet.js';
+import Js5Archive from '#/js5/Js5Archive.js';
 
 export function parseNpcConfig(key: string, value: string): ConfigValue | null | undefined {
     // prettier-ignore
@@ -23,11 +25,20 @@ export function parseNpcConfig(key: string, value: string): ConfigValue | null |
         'resizeh', 'resizev',
         'wanderrange', 'maxrange', 'huntrange', 'attackrange',
         'hitpoints', 'attack', 'strength', 'defence', 'magic', 'ranged',
-        'timer', 'respawnrate'
+        'timer', 'respawnrate',
+
+        // added
+        'ambient',
+        'contrast',
+        'headicon',
+        'turnspeed'
     ];
     // prettier-ignore
     const booleanKeys = [
-        'hasalpha', 'minimap', 'members', 'givechase'
+        'hasalpha', 'minimap', 'members', 'givechase',
+        // added
+        'alwaysontop',
+        'active'
     ];
 
     if (stringKeys.includes(key)) {
@@ -114,7 +125,7 @@ export function parseNpcConfig(key: string, value: string): ConfigValue | null |
             return null;
         }
 
-        return ColorConversion.rgb15toHsl16(parseInt(value));
+        return parseInt(value);
     } else if (key === 'readyanim') {
         const index = SeqPack.getByName(value);
         if (index === -1) {
@@ -260,16 +271,57 @@ export function parseNpcConfig(key: string, value: string): ConfigValue | null |
             return [coord, 0]; // maybe we return null instead?
         }
         return [coord, delay];
-    } else {
+    }
+
+    // added
+    else if (key === 'multivarp') {
+        const varp = VarpPack.getByName(value);
+        if (varp === -1) {
+            return null;
+        }
+
+        return varp;
+    }
+    else if (key === 'multivarbit') {
+        const varbit = VarbitPack.getByName(value);
+        if (varbit === -1) {
+            return null;
+        }
+
+        return varbit;
+    }
+    else if (key.startsWith('multinpc')) {
+        const index = parseInt(key[8]);
+        const npcName = value;
+
+        const npcId = npcName === 'null' ? 0xffff : NpcPack.getByName(npcName);
+        if (npcId === -1) {
+            return null;
+        }
+        return (npcId << 16) | index;
+    }
+    // else if (key === 'multinpc') {
+    //
+    //     const args = value.split(',');
+    //     const index = parseInt(args[0]);
+    //     const npcName = args[1];
+    //
+    //     const npcId = npcName === 'null' ? 0xffff : NpcPack.getByName(npcName);
+    //     if (npcId === -1) {
+    //         return null;
+    //     }
+    //
+    //     return (npcId << 16) | index;
+    // }
+
+    else {
         return undefined;
     }
 }
 
-export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(NpcPack.size);
-    const server: PackedData = new PackedData(NpcPack.size);
-
+export function packJs5NpcConfigs(configs: Map<string, ConfigLine[]>, archive: Js5Archive): void {
     for (let i = 0; i < NpcPack.size; i++) {
+        const client = Packet.alloc(1);
         const debugname = NpcPack.getById(i);
         const config = configs.get(debugname)!;
 
@@ -282,6 +334,9 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         const params: ParamValue[] = [];
         const patrol = [];
         let vislevel = false;
+        let multivarbit = -1;
+        let multivarp = -1;
+        const multiNpcs: number[] = [];
 
         for (let j = 0; j < config.length; j++) {
             const { key, value } = config[j];
@@ -303,9 +358,6 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
                 }
             } else if (key === 'param') {
                 params.push(value as ParamValue);
-            } else if (key === 'desc') {
-                client.p1(3);
-                client.pjstr(value as string);
             } else if (key === 'size') {
                 client.p1(12);
                 client.p1(value as number);
@@ -320,38 +372,17 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
                     client.p2(value[2] as number);
                     client.p2(value[3] as number);
                 } else {
-                    client.p1(14);    
+                    client.p1(14);
                     client.p2(value as number);
                 }
             } else if (key === 'hasalpha') {
                 if (value === true) {
                     client.p1(16);
                 }
-            } else if (key === 'category') {
-                server.p1(18);
-                server.p2(value as number);
             } else if (key.startsWith('op')) {
                 const index = parseInt(key.substring('op'.length)) - 1;
                 client.p1(30 + index);
-                client.pjstr(value as string);
-            } else if (key === 'attack') {
-                server.p1(74);
-                server.p2(value as number);
-            } else if (key === 'defence') {
-                server.p1(75);
-                server.p2(value as number);
-            } else if (key === 'strength') {
-                server.p1(76);
-                server.p2(value as number);
-            } else if (key === 'hitpoints') {
-                server.p1(77);
-                server.p2(value as number);
-            } else if (key === 'ranged') {
-                server.p1(78);
-                server.p2(value as number);
-            } else if (key === 'magic') {
-                server.p1(79);
-                server.p2(value as number);
+                client.pstr(value as string);
             } else if (key === 'resizex') {
                 client.p1(90);
                 client.p2(value as number);
@@ -375,7 +406,153 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
             } else if (key === 'resizev') {
                 client.p1(98);
                 client.p2(value as number);
-            } else if (key === 'wanderrange') {
+            }
+            else if (key === 'alwaysontop') {
+                if (value === true) {
+                    client.p1(99);
+                }
+            }
+            else if (key === 'ambient') {
+                client.p1(100);
+                client.p1(value as number);
+            }
+            else if (key === 'contrast') {
+                client.p1(101);
+                client.p1(value as number);
+            }
+            else if (key === 'headicon') {
+                client.p1(102);
+                client.p2(value as number);
+            }
+            else if (key === 'turnspeed') {
+                client.p1(103);
+                client.p2(value as number);
+            }
+            else if (key === 'multivarbit') {
+                multivarbit = value as number;
+            }
+            else if (key === 'multivarp') {
+                multivarp = value as number;
+            }
+            else if (key.startsWith('multinpc')) {
+                const packed = value as number;
+                multiNpcs.push(packed);
+            }
+            else if (key === 'active') {
+                if (value === false) {
+                    client.p1(107);
+                }
+            }
+        }
+
+        if ((multivarbit !== -1 || multivarp !== -1) && multiNpcs.length > 0) {
+            client.p1(106);
+
+            client.p2(multivarbit);
+            client.p2(multivarp);
+
+            const npcs = multiNpcs.sort((a, b) => {
+                const indexA = a & 0xffff;
+                const indexB = b & 0xffff;
+                return indexA - indexB;
+            });
+
+            client.p1(npcs.length - 1);
+
+            npcs.forEach(npc => {
+                const id = npc >> 16;
+                client.p2(id == 0xffff ? -1 : id);
+            });
+        }
+
+        if (recol_s.length > 0) {
+            client.p1(40);
+            client.p1(recol_s.length);
+
+            for (let k = 0; k < recol_s.length; k++) {
+                client.p2(recol_s[k]);
+                client.p2(recol_d[k]);
+            }
+        }
+
+        if (name === null) {
+            name = debugname;
+        }
+
+        if (name !== null) {
+            client.p1(2);
+            client.pstr(name);
+        }
+
+        if (models.length > 0) {
+            client.p1(1);
+
+            client.p1(models.length);
+            for (let k = 0; k < models.length; k++) {
+                client.p2(models[k]);
+            }
+        }
+
+        if (heads.length > 0) {
+            client.p1(60);
+
+            client.p1(heads.length);
+            for (let k = 0; k < heads.length; k++) {
+                client.p2(heads[k]);
+            }
+        }
+
+        if (!vislevel) {
+            // TODO: calculate NPC level based on stats
+            client.p1(95);
+            client.p2(1);
+        }
+
+        client.p1(0);
+
+        archive.writeFile(9, i, client.data.subarray(0, client.pos));
+    }
+}
+
+export function packNpcConfigs(configs: Map<string, ConfigLine[]>): {  server: PackedData } {
+    const server: PackedData = new PackedData(NpcPack.size);
+
+    for (let i = 0; i < NpcPack.size; i++) {
+        const debugname = NpcPack.getById(i);
+        const config = configs.get(debugname)!;
+
+        // collect these to write at the end
+        const params: ParamValue[] = [];
+        const patrol = [];
+
+        for (let j = 0; j < config.length; j++) {
+            const { key, value } = config[j];
+
+            if (key === 'param') {
+                params.push(value as ParamValue);
+            } else if (key === 'category') {
+                server.p1(18);
+                server.p2(value as number);
+            } else if (key === 'attack') {
+                server.p1(74);
+                server.p2(value as number);
+            } else if (key === 'defence') {
+                server.p1(75);
+                server.p2(value as number);
+            } else if (key === 'strength') {
+                server.p1(76);
+                server.p2(value as number);
+            } else if (key === 'hitpoints') {
+                server.p1(77);
+                server.p2(value as number);
+            } else if (key === 'ranged') {
+                server.p1(78);
+                server.p2(value as number);
+            } else if (key === 'magic') {
+                server.p1(79);
+                server.p2(value as number);
+            }
+            else if (key === 'wanderrange') {
                 server.p1(200);
                 server.p1(value as number);
             } else if (key === 'maxrange') {
@@ -416,49 +593,10 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
                     server.p1(213);
                 }
             }
-        }
-
-        if (recol_s.length > 0) {
-            client.p1(40);
-            client.p1(recol_s.length);
-
-            for (let k = 0; k < recol_s.length; k++) {
-                client.p2(recol_s[k]);
-                client.p2(recol_d[k]);
+            else if (key === 'desc') {
+                server.p1(251);
+                server.pjstr(value as string);
             }
-        }
-
-        if (name === null) {
-            name = debugname;
-        }
-
-        if (name !== null) {
-            client.p1(2);
-            client.pjstr(name);
-        }
-
-        if (models.length > 0) {
-            client.p1(1);
-
-            client.p1(models.length);
-            for (let k = 0; k < models.length; k++) {
-                client.p2(models[k]);
-            }
-        }
-
-        if (heads.length > 0) {
-            client.p1(60);
-
-            client.p1(heads.length);
-            for (let k = 0; k < heads.length; k++) {
-                client.p2(heads[k]);
-            }
-        }
-
-        if (!vislevel) {
-            // TODO: calculate NPC level based on stats
-            client.p1(95);
-            client.p2(1);
         }
 
         if (patrol.length > 0) {
@@ -492,9 +630,8 @@ export function packNpcConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

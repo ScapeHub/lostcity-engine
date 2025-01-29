@@ -400,8 +400,7 @@ export function parseHuntConfig(key: string, value: string): ConfigValue | null 
     }
 }
 
-export function packHuntConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(HuntPack.size);
+export function packHuntConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(HuntPack.size);
 
     for (let i = 0; i < HuntPack.size; i++) {
@@ -532,9 +531,8 @@ export function packHuntConfigs(configs: Map<string, ConfigLine[]>): { client: P
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

@@ -1,10 +1,10 @@
 import Js5Index from '#/js5/Js5Index.js';
 import Packet from '#/io/Packet.js';
-import { gunzipDataSync } from '#/io/GZip.js';
+import { gunzipDataSync, gzipCompress } from '#/io/GZip.js';
 import BZip2 from '#/io/BZip2.js';
 import { copyBytes } from '#/util/ArrayCopy.js';
 import Js5Protocol from '#/js5/Js5Protocol.js';
-import { genHash } from '#/io/Jagfile.js';
+import { genJagHash } from '#/io/Jagfile.js';
 
 type GroupMetadata = {
     id: number;
@@ -32,18 +32,27 @@ export default class Js5Archive {
     public checksum: number = 0;
     public crc8: number = 0;
     public size: number = 0;
-    public isNamed: boolean;
+    public isNamed: boolean = false;
 
     // Dynamic storage for group and file metadata
     private groups: Map<number, GroupMetadata> = new Map();
 
     private _isMetadataLoaded: boolean = false;
 
-    constructor(index: number, idx255: Js5Index, dataIndex: Js5Index, isNamed: boolean = false) {
+    constructor(index: number, idx255: Js5Index, dataIndex: Js5Index) {
         this.index = index;
         this.idx255 = idx255;
         this.dataIndex = dataIndex;
-        this.isNamed = isNamed;
+    }
+
+    public listGroupFiles(groupId: number, keys?: Int32Array): MapIterator<FileMetadata> {
+        const group = this.getGroupMetadata(groupId, true, keys);
+        return group.files.values();
+    }
+
+    public listGroupIds(): number[] {
+        const groups = [...this.groups.values()];
+        return groups.map(group => group.id);
     }
 
     public readFile(groupId: number, fileId: number, keys?: Int32Array): Uint8Array {
@@ -51,7 +60,7 @@ export default class Js5Archive {
             this.decodeMetadata();
         }
 
-        const group = this.getGroupMetadata(groupId, true);
+        const group = this.getGroupMetadata(groupId, true, keys);
         const file = group.files.get(fileId);
         if (file == null) {
             throw new Error(`File not found for group ${groupId} file ${fileId}`);
@@ -85,13 +94,15 @@ export default class Js5Archive {
         const file: FileMetadata = {
             id: fileId,
             size: data.length,
-            content: data
+            content: data,
+            nameHash: 0
         };
 
         if (group.size == 0) {
             group.size++;
         }
 
+        this.isNamed = true;
         group.requiresPacking = true;
         group.files.set(fileId, file);
     }
@@ -110,7 +121,7 @@ export default class Js5Archive {
                 return;
             }
 
-            const encodedGroup = this.encodeGroup(group);
+            const encodedGroup = this.writeGroup(group);
             const written = this.dataIndex.write(encodedGroup, group.id, encodedGroup.length);
             if (!written) {
                 throw new Error(`Failed to write group ${group.id} to archive ${this.index}`);
@@ -124,17 +135,53 @@ export default class Js5Archive {
         }
     }
 
+    private writeGroup(group: GroupMetadata): Uint8Array {
+        const files = [...group.files.values()].sort((a, b) => a.id - b.id);
+        let size: number = 0;
+
+        files.forEach(file => (size += file.content?.length ?? 0));
+
+        const packet = Packet.allocDirect(size + files.length * 4 + 1);
+        if (files.length <= 1) {
+            packet.pdata(files[0].content!, 0, files[0].content!.length);
+
+            const compressionType: number = group.keys ? 2 : 1;
+            const compressed = Js5Archive.compress(packet.data.subarray(0, packet.pos), compressionType, group);
+            group.checksum = Packet.getcrc(compressed, 0, compressed.length - 2);
+            return compressed;
+        }
+
+        files.forEach(file => packet.pdata(file.content!, 0, file.content!.length));
+
+        const stripeCount: number = 1;
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileSize = file.content?.length ?? 0;
+            const delta = i == 0 ? 0 : (files[i - 1]?.content?.length ?? 0);
+
+            packet.p4(fileSize - delta);
+        }
+
+        packet.p1(stripeCount);
+
+        const compressionType: number = group.keys ? 2 : 1;
+        const compressed = Js5Archive.compress(packet.data.subarray(0, packet.pos), compressionType, group);
+        group.checksum = Packet.getcrc(compressed, 0, compressed.length - 2);
+        return compressed;
+    }
+
     private encodeGroup(group: GroupMetadata): Uint8Array {
         if (group.files.size === 0) {
             throw new Error(`Group ${group.id} does not contain any files.`);
         }
 
         // If there's only one file, bypass encoding for simplicity
-        if (group.files.size === 1) {
+        if (group.size <= 1) {
             const singleFile = [...group.files.values()][0];
             if (singleFile.content == null) {
                 throw new Error(`File content missing for group ${group.id} file ${singleFile.id}`);
             }
+            group.checksum = Packet.getcrc(singleFile.content, 0, singleFile.content.length);
             return singleFile.content; // Return the raw file content directly
         }
 
@@ -210,31 +257,56 @@ export default class Js5Archive {
 
         const decompressedData = Js5Archive.decompress(compressedData);
 
-        if (group.size < 1) {
+        if (group.size <= 1) {
             const file = [...group.files.values()][0];
             file.content = decompressedData;
             return;
         }
 
+        let dataLength = decompressedData.length;
+        const stripeCount = decompressedData[--dataLength] & 0xff;
+
         const packet = new Packet(decompressedData);
-        const stripeCount = decompressedData[decompressedData.length - 1] & 0xff;
+        dataLength -= 4 * stripeCount * group.size;
+        packet.pos = dataLength;
 
-        const fileSizes = new Array(group.size).fill(0);
-        packet.pos = decompressedData.length - 1 - 4 * stripeCount * group.size;
-
-        for (let stripe = 0; stripe < stripeCount; stripe++) {
-            let cumulativeSize = 0;
-            for (let i = 0; i < group.size; i++) {
-                const delta = packet.g4(); // Read file size delta
-                fileSizes[i] += cumulativeSize += delta;
+        const fileSizes = new Uint32Array(group.size);
+        for (let stripe = 0; stripeCount > stripe; stripe++) {
+            let currentLength = 0;
+            for (let f = 0; f < group.size; f++) {
+                const delta = packet.g4();
+                currentLength += delta;
+                fileSizes[f] += currentLength;
             }
         }
 
-        // Distribute file data
-        packet.pos = 0;
-        for (let i = 0; i < group.size; i++) {
-            const file = [...group.files.values()][i];
-            file.content = decompressedData.subarray(packet.pos, (packet.pos += fileSizes[i]));
+        const groupFiles = [...group.files.values()];
+        for (let f = 0; f < group.size; f++) {
+            if (!groupFiles[f].content) {
+                groupFiles[f].content = new Uint8Array(fileSizes[f]);
+            }
+
+            fileSizes[f] = 0;
+        }
+
+        packet.pos = dataLength;
+        let decompressedDataPointer = 0;
+        for (let stripe = 0; stripeCount > stripe; stripe++) {
+            let size = 0;
+            for (let f = 0; f < group.size; f++) {
+                const stripeLength = fileSizes[f];
+                const delta = packet.g4();
+                size += delta;
+
+                const content = groupFiles[f].content;
+
+                if (content) {
+                    copyBytes(decompressedData, decompressedDataPointer, content, stripeLength, size);
+                }
+
+                fileSizes[f] += size;
+                decompressedDataPointer += size;
+            }
         }
     }
 
@@ -262,7 +334,7 @@ export default class Js5Archive {
         if (this.isNamed) {
             for (const groupId of sortedGroups) {
                 const group = this.getGroupMetadata(groupId);
-                if (!group.nameHash) {
+                if (group.nameHash === undefined) {
                     throw new Error(`Archive ${this.index} Group ${groupId} does not have a name`);
                 }
                 packet.p4(group.nameHash);
@@ -313,7 +385,7 @@ export default class Js5Archive {
                         throw new Error(`Archive ${this.index} Group ${groupId} File ${fileId} not found`);
                     }
 
-                    if (!file.nameHash) {
+                    if (file.nameHash === undefined) {
                         throw new Error(`Archive ${this.index} Group ${groupId} File ${fileId} does not have a name`);
                     }
 
@@ -322,7 +394,10 @@ export default class Js5Archive {
             }
         }
 
-        return Js5Archive.compress(packet.data.subarray(0, packet.pos));
+        const packedData = packet.data.subarray(0, packet.pos);
+        const compressedData = Js5Archive.compress(packedData);
+        return compressedData;
+        // return Js5Archive.compress(packet.data.subarray(0, packet.pos));
     }
 
     private decodeMetadata() {
@@ -339,7 +414,7 @@ export default class Js5Archive {
             throw new Error(`Invalid protocol: ${protocol}`);
         }
 
-        const hasNames = packet.g1() != 0;
+        this.isNamed = packet.g1() != 0;
 
         // Read group size
         this.size = packet.g2();
@@ -365,7 +440,7 @@ export default class Js5Archive {
         let group: GroupMetadata;
 
         // group names
-        if (hasNames) {
+        if (this.isNamed) {
             for (let i = 0; i < this.size; i++) {
                 groupId = groupIds[i];
                 group = this.getGroupMetadata(groupId);
@@ -415,12 +490,11 @@ export default class Js5Archive {
         }
 
         // group file names
-        if (hasNames) {
+        if (this.isNamed) {
             for (let i = 0; i < this.size; i++) {
                 const groupId = groupIds[i];
                 const group = this.getGroupMetadata(groupId);
 
-                group.nameHash = packet.g4();
                 [...group.files.values()].forEach(file => {
                     file.nameHash = packet.g4();
                 });
@@ -430,7 +504,7 @@ export default class Js5Archive {
         this._isMetadataLoaded = true;
     }
 
-    private getGroupMetadata(groupId: number, loadGroup: boolean = false): GroupMetadata {
+    private getGroupMetadata(groupId: number, loadGroup: boolean = false, keys?: Int32Array): GroupMetadata {
         // TODO support getting groups by name
         const group = this.groups.get(groupId);
         if (group == null) {
@@ -438,7 +512,7 @@ export default class Js5Archive {
         }
 
         if (!group.isLoaded && loadGroup) {
-            this.decodeGroup(group);
+            this.decodeGroup(group, keys);
         }
         return group;
     }
@@ -456,13 +530,12 @@ export default class Js5Archive {
                 isLoaded: true
             };
 
-            if (groupName) {
-                group.nameHash = genHash(groupName);
-            }
-
             this.groups.set(groupId, group);
         }
         group.keys = keys;
+        if (groupName !== undefined) {
+            group.nameHash = genJagHash(groupName);
+        }
 
         if (!group.isLoaded) {
             this.decodeGroup(group, keys);
@@ -471,27 +544,59 @@ export default class Js5Archive {
         return group;
     }
 
-    public static compress(cacheData: Uint8Array, type: number = 1) {
-        const packet = Packet.alloc(4);
+    public static compress(cacheData: Uint8Array, type: number = 1, group?: GroupMetadata) {
+        let compressed: Uint8Array;
+        if (type == 0) {
+            compressed = cacheData;
+        }
+        else if (type == 1) {
+            compressed = BZip2.compress(cacheData, false, true);
+        }
+        else if (type == 2) {
+            compressed = gzipCompress(cacheData, 9, cacheData.length);
+        }
+        else {
+            throw new Error(`Invalid compression type: ${type}`);
+        }
+
+        let length = compressed.length + 5;
+        if (type != 0) {
+            length += 4;
+        }
+        if (group) {
+            length += 2;
+        }
+        if (group?.keys) {
+            length += 4;
+        }
+
+        const packet = Packet.allocDirect(length);
 
         packet.p1(type);
 
-        if (type == 0) {
-            packet.p4(cacheData.length);
-            packet.pdata(cacheData, 0, cacheData.length);
-            return packet.data;
-        }
-
-        let compressed: Uint8Array;
-        if (type == 1) {
-            compressed = BZip2.compress(cacheData, true);
-        } else {
-            // TODO support gzip compression
-            throw new Error(`Unsupported compression type: ${type}`);
-        }
-
         packet.p4(compressed.length);
+
+        if (type != 0) {
+            packet.p4(cacheData.length);
+        }
+
         packet.pdata(compressed, 0, compressed.length);
+
+        if (group) {
+            if (group.keys && group.keys[0] !== 0 && group.keys[1] !== 0 && group.keys[2] !== 0 && group.keys[3] !== 0) {
+                if (type !== 2) {
+                    throw new Error(`Invalid compression type: ${type}, use 2 (gzip) instead for encrypted data.`);
+                }
+                packet.encrypt(group.keys, 5, packet.pos);
+            }
+
+            try {
+                packet.p2(group.version);
+            }
+            catch (e) {
+                console.log('failed to write group version:', e);
+            }
+        }
         return packet.data.subarray(0, packet.pos);
     }
 
@@ -515,8 +620,7 @@ export default class Js5Archive {
             if (type != 1) {
                 // gzip
                 decompressed = gunzipDataSync(cacheData, 9, length);
-            }
-            else {
+            } else {
                 // bzip
                 decompressed = BZip2.decompress(packet.data.subarray(packet.pos), decompressedLength, true);
             }

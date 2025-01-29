@@ -4,6 +4,7 @@ import ScriptVarType from '#/cache/config/ScriptVarType.js';
 import { ConfigValue, ConfigLine, packStepError, PackedData, isConfigBoolean, getConfigBoolean } from '#tools/pack/config/PackShared.js';
 import { lookupParamValue } from '#tools/pack/config/ParamConfig.js';
 import { DbRowPack, DbTablePack } from '#/util/PackFile.js';
+import Packet from '#/io/Packet.js';
 
 function parseCsv(str: string): string[] {
     const result = [];
@@ -82,8 +83,7 @@ export function parseDbRowConfig(key: string, value: string): ConfigValue | null
     }
 }
 
-export function packDbRowConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(DbRowPack.size);
+export function packDbRowConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(DbRowPack.size);
 
     for (let i = 0; i < DbRowPack.size; i++) {
@@ -162,9 +162,8 @@ export function packDbRowConfigs(configs: Map<string, ConfigLine[]>): { client: 
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

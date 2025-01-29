@@ -3,6 +3,7 @@ import ScriptVarType from '#/cache/config/ScriptVarType.js';
 import { ConfigValue, ConfigLine, PackedData, isConfigBoolean, getConfigBoolean, packStepError } from '#tools/pack/config/PackShared.js';
 import { lookupParamValue } from '#tools/pack/config/ParamConfig.js';
 import { EnumPack } from '#/util/PackFile.js';
+import Packet from '#/io/Packet.js';
 
 export function parseEnumConfig(key: string, value: string): ConfigValue | null | undefined {
     const stringKeys: string[] = [];
@@ -58,8 +59,7 @@ export function parseEnumConfig(key: string, value: string): ConfigValue | null 
     }
 }
 
-export function packEnumConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(EnumPack.size);
+export function packEnumConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(EnumPack.size);
 
     for (let i = 0; i < EnumPack.size; i++) {
@@ -146,9 +146,8 @@ export function packEnumConfigs(configs: Map<string, ConfigLine[]>): { client: P
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

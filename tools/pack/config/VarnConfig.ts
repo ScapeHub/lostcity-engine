@@ -51,8 +51,7 @@ export function parseVarnConfig(key: string, value: string): ConfigValue | null 
     }
 }
 
-export function packVarnConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(VarnPack.size);
+export function packVarnConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(VarnPack.size);
 
     for (let i = 0; i < VarnPack.size; i++) {
@@ -71,9 +70,8 @@ export function packVarnConfigs(configs: Map<string, ConfigLine[]>): { client: P
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

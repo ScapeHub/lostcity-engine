@@ -54,8 +54,7 @@ export function parseMesAnimConfig(key: string, value: string): ConfigValue | nu
     }
 }
 
-export function packMesAnimConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(MesAnimPack.size);
+export function packMesAnimConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(MesAnimPack.size);
 
     for (let i = 0; i < MesAnimPack.size; i++) {
@@ -80,9 +79,8 @@ export function packMesAnimConfigs(configs: Map<string, ConfigLine[]>): { client
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

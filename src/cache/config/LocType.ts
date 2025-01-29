@@ -135,8 +135,6 @@ export default class LocType extends ConfigType {
             }
         } else if (code === 2) {
             this.name = dat.gjstr();
-        } else if (code === 3) {
-            this.desc = dat.gjstr();
         } else if (code === 14) {
             this.width = dat.g1();
         } else if (code === 15) {
@@ -212,6 +210,8 @@ export default class LocType extends ConfigType {
             this.params = ParamHelper.decodeParams(dat);
         } else if (code === 250) {
             this.debugname = dat.gjstr();
+        } else if (code == 251) {
+            this.desc = dat.gjstr();
         } else {
             printFatalError(`Unrecognized loc config code: ${code}\nThis error comes from the packed data being out of sync, try running ` + kleur.green().bold('npm run build') + ', then restarting this.');
         }

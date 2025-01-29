@@ -7,6 +7,8 @@ import { lookupParamValue } from '#tools/pack/config/ParamConfig.js';
 import ColorConversion from '#/util/ColorConversion.js';
 import { printWarning } from '#/util/Logger.js';
 import { CategoryPack, ModelPack, ObjPack, SeqPack } from '#/util/PackFile.js';
+import Packet from '#/io/Packet.js';
+import Js5Archive from '#/js5/Js5Archive.js';
 
 export function parseObjConfig(key: string, value: string): ConfigValue | null | undefined {
     // prettier-ignore
@@ -18,7 +20,15 @@ export function parseObjConfig(key: string, value: string): ConfigValue | null |
     // prettier-ignore
     const numberKeys = [
         '2dzoom', '2dxan', '2dyan', '2dxof', '2dyof', '2dzan',
-        'cost', 'respawnrate'
+        'cost', 'respawnrate',
+
+        // added
+        'resizex',
+        'resizey',
+        'resizez',
+        'ambient',
+        'contrast',
+        'team'
     ];
     // prettier-ignore
     const booleanKeys = [
@@ -193,8 +203,210 @@ export function parseObjConfig(key: string, value: string): ConfigValue | null |
     }
 }
 
-export function packObjConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(ObjPack.size);
+export function packJs5ObjConfigs(configs: Map<string, ConfigLine[]>, archive: Js5Archive): void {
+    const template_for_cert = ObjPack.getByName('template_for_cert');
+    if (template_for_cert === -1) {
+        printWarning('template_for_cert does not exist, cannot auto-generate certificates');
+    }
+
+    for (let i = 0; i < ObjPack.size; i++) {
+        const client = Packet.alloc(1);
+        const debugname = ObjPack.getById(i);
+        let config;
+
+        if (debugname.startsWith('cert_')) {
+            const uncert = ObjPack.getByName(debugname.substring('cert_'.length));
+            if (uncert === -1) {
+                throw packStepError(debugname, 'Cert does not link to anything based on its name.');
+            }
+
+            config = [
+                { key: 'certlink', value: uncert },
+                { key: 'certtemplate', value: template_for_cert }
+            ];
+        } else {
+            config = configs.get(debugname)!;
+
+            // if no name we fill with the debug name
+            let hasName = false;
+            let hasModel = false;
+            for (let j = 0; j < config.length; j++) {
+                const key = config[j].key;
+
+                if (key === 'name') {
+                    hasName = true;
+                } else if (key === 'model') {
+                    hasModel = true;
+                }
+            }
+
+            if (!hasName && hasModel) {
+                const name = debugname.charAt(0).toUpperCase() + debugname.slice(1).replace(/_/g, ' ');
+                config.push({ key: 'name', value: name });
+            }
+        }
+
+        // collect these to write at the end
+        const recol_s: number[] = [];
+        const recol_d: number[] = [];
+        let name: string | null = null;
+
+        for (let j = 0; j < config.length; j++) {
+            const { key, value } = config[j];
+
+            if (key === 'name') {
+                name = value as string;
+            } else if (key.startsWith('recol')) {
+                const index = parseInt(key.substring('recol'.length, key.length - 1)) - 1;
+                if (key.endsWith('s')) {
+                    recol_s[index] = value as number;
+                } else {
+                    recol_d[index] = value as number;
+                }
+            } else if (key === 'model') {
+                client.p1(1);
+                client.p2(value as number);
+            }
+            else if (key === '2dzoom') {
+                client.p1(4);
+                client.p2(value as number);
+            } else if (key === '2dxan') {
+                client.p1(5);
+                client.p2(value as number);
+            } else if (key === '2dyan') {
+                client.p1(6);
+                client.p2(value as number);
+            } else if (key === '2dxof') {
+                client.p1(7);
+                client.p2(value as number);
+            } else if (key === '2dyof') {
+                client.p1(8);
+                client.p2(value as number);
+            } else if (key === 'code9') {
+                if (value === true) {
+                    client.p1(9);
+                }
+            } else if (key === 'code10') {
+                client.p1(10);
+                client.p2(value as number);
+            } else if (key === 'stackable') {
+                if (value === true) {
+                    client.p1(11);
+                }
+            } else if (key === 'cost') {
+                client.p1(12);
+                client.p4(value as number);
+            } else if (key === 'members') {
+                if (value === true) {
+                    client.p1(16);
+                }
+            } else if (key === 'manwear') {
+                const values = value as number[];
+                client.p1(23);
+                client.p2(values[0]);
+                client.p1(values[1]);
+            } else if (key === 'manwear2') {
+                client.p1(24);
+                client.p2(value as number);
+            } else if (key === 'womanwear') {
+                const values = value as number[];
+                client.p1(25);
+                client.p2(values[0]);
+                client.p1(values[1]);
+            } else if (key === 'womanwear2') {
+                client.p1(26);
+                client.p2(value as number);
+            }  else if (key.startsWith('op')) {
+                const index = parseInt(key.substring('op'.length)) - 1;
+                client.p1(30 + index);
+                client.pstr(value as string);
+            } else if (key.startsWith('iop')) {
+                const index = parseInt(key.substring('iop'.length)) - 1;
+                client.p1(35 + index);
+                client.pstr(value as string);
+            } else if (key === 'manwear3') {
+                client.p1(78);
+                client.p2(value as number);
+            } else if (key === 'womanwear3') {
+                client.p1(79);
+                client.p2(value as number);
+            } else if (key === 'manhead') {
+                client.p1(90);
+                client.p2(value as number);
+            } else if (key === 'womanhead') {
+                client.p1(91);
+                client.p2(value as number);
+            } else if (key === 'manhead2') {
+                client.p1(92);
+                client.p2(value as number);
+            } else if (key === 'womanhead2') {
+                client.p1(93);
+                client.p2(value as number);
+            } else if (key === '2dzan') {
+                client.p1(95);
+                client.p2(value as number);
+            } else if (key === 'certlink') {
+                client.p1(97);
+                client.p2(value as number);
+            } else if (key === 'certtemplate') {
+                client.p1(98);
+                client.p2(value as number);
+            } else if (key.startsWith('count')) {
+                const index = parseInt(key.substring('count'.length)) - 1;
+                const values = value as number[];
+
+                client.p1(100 + index);
+                client.p2(values[0]);
+                client.p2(values[1]);
+            }
+            else if (key === 'resizex') {
+                client.p1(110);
+                client.p2(value as number);
+            }
+            else if (key === 'resizey') {
+                client.p1(111);
+                client.p2(value as number);
+            }
+
+            else if (key === 'resizez') {
+                client.p1(112);
+                client.p2(value as number);
+            }
+            else if (key === 'ambient') {
+                client.p1(113);
+                client.p1(value as number);
+            }
+            else if (key === 'contrast') {
+                client.p1(114);
+                client.p1(value as number);
+            }
+            else if (key === 'team') {
+                client.p1(115);
+                client.p1(value as number);
+            }
+        }
+
+        if (recol_s.length > 0) {
+            client.p1(40);
+            client.p1(recol_s.length);
+
+            for (let k = 0; k < recol_s.length; k++) {
+                client.p2(recol_s[k]);
+                client.p2(recol_d[k]);
+            }
+        }
+
+        if (name !== null) {
+            client.p1(2);
+            client.pstr(name);
+        }
+
+        client.p1(0);
+        archive.writeFile(10, i, client.data.subarray(0, client.pos));
+    }
+}
+
+export function packObjConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(ObjPack.size);
 
     const template_for_cert = ObjPack.getByName('template_for_cert');
@@ -239,60 +451,13 @@ export function packObjConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         }
 
         // collect these to write at the end
-        const recol_s: number[] = [];
-        const recol_d: number[] = [];
-        let name: string | null = null;
         const params: ParamValue[] = [];
 
         for (let j = 0; j < config.length; j++) {
             const { key, value } = config[j];
 
-            if (key === 'name') {
-                name = value as string;
-            } else if (key.startsWith('recol')) {
-                const index = parseInt(key.substring('recol'.length, key.length - 1)) - 1;
-                if (key.endsWith('s')) {
-                    recol_s[index] = value as number;
-                } else {
-                    recol_d[index] = value as number;
-                }
-            } else if (key === 'param') {
+            if (key === 'param') {
                 params.push(value as ParamValue);
-            } else if (key === 'model') {
-                client.p1(1);
-                client.p2(value as number);
-            } else if (key === 'desc') {
-                client.p1(3);
-                client.pjstr(value as string);
-            } else if (key === '2dzoom') {
-                client.p1(4);
-                client.p2(value as number);
-            } else if (key === '2dxan') {
-                client.p1(5);
-                client.p2(value as number);
-            } else if (key === '2dyan') {
-                client.p1(6);
-                client.p2(value as number);
-            } else if (key === '2dxof') {
-                client.p1(7);
-                client.p2(value as number);
-            } else if (key === '2dyof') {
-                client.p1(8);
-                client.p2(value as number);
-            } else if (key === 'code9') {
-                if (value === true) {
-                    client.p1(9);
-                }
-            } else if (key === 'code10') {
-                client.p1(10);
-                client.p2(value as number);
-            } else if (key === 'stackable') {
-                if (value === true) {
-                    client.p1(11);
-                }
-            } else if (key === 'cost') {
-                client.p1(12);
-                client.p4(value as number);
             } else if (key === 'wearpos') {
                 server.p1(13);
                 server.p1(value as number);
@@ -303,83 +468,25 @@ export function packObjConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
                 if (value === false) {
                     server.p1(15);
                 }
-            } else if (key === 'members') {
-                if (value === true) {
-                    client.p1(16);
-                }
-            } else if (key === 'manwear') {
-                const values = value as number[];
-                client.p1(23);
-                client.p2(values[0]);
-                client.p1(values[1]);
-            } else if (key === 'manwear2') {
-                client.p1(24);
-                client.p2(value as number);
-            } else if (key === 'womanwear') {
-                const values = value as number[];
-                client.p1(25);
-                client.p2(values[0]);
-                client.p1(values[1]);
-            } else if (key === 'womanwear2') {
-                client.p1(26);
-                client.p2(value as number);
             } else if (key === 'wearpos3') {
                 server.p1(27);
                 server.p1(value as number);
-            } else if (key.startsWith('op')) {
-                const index = parseInt(key.substring('op'.length)) - 1;
-                client.p1(30 + index);
-                client.pjstr(value as string);
-            } else if (key.startsWith('iop')) {
-                const index = parseInt(key.substring('iop'.length)) - 1;
-                client.p1(35 + index);
-                client.pjstr(value as string);
             } else if (key === 'weight') {
                 server.p1(75);
                 server.p2(value as number);
-            } else if (key === 'manwear3') {
-                client.p1(78);
-                client.p2(value as number);
-            } else if (key === 'womanwear3') {
-                client.p1(79);
-                client.p2(value as number);
-            } else if (key === 'manhead') {
-                client.p1(90);
-                client.p2(value as number);
-            } else if (key === 'womanhead') {
-                client.p1(91);
-                client.p2(value as number);
-            } else if (key === 'manhead2') {
-                client.p1(92);
-                client.p2(value as number);
-            } else if (key === 'womanhead2') {
-                client.p1(93);
-                client.p2(value as number);
             } else if (key === 'category') {
                 server.p1(94);
                 server.p2(value as number);
-            } else if (key === '2dzan') {
-                client.p1(95);
-                client.p2(value as number);
             } else if (key === 'dummyitem') {
                 server.p1(96);
                 server.p1(value as number);
-            } else if (key === 'certlink') {
-                client.p1(97);
-                client.p2(value as number);
-            } else if (key === 'certtemplate') {
-                client.p1(98);
-                client.p2(value as number);
-            } else if (key.startsWith('count')) {
-                const index = parseInt(key.substring('count'.length)) - 1;
-                const values = value as number[];
-
-                client.p1(100 + index);
-                client.p2(values[0]);
-                client.p2(values[1]);
             } else if (key === 'respawnrate') {
                 server.p1(201);
                 server.p2(value as number);
+            }
+            else if (key === 'desc') {
+                server.p1(251);
+                server.pjstr(value as string);
             }
         }
 
@@ -388,21 +495,6 @@ export function packObjConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         if (cert !== -1) {
             server.p1(97);
             server.p2(cert);
-        }
-
-        if (recol_s.length > 0) {
-            client.p1(40);
-            client.p1(recol_s.length);
-
-            for (let k = 0; k < recol_s.length; k++) {
-                client.p2(recol_s[k]);
-                client.p2(recol_d[k]);
-            }
-        }
-
-        if (name !== null) {
-            client.p1(2);
-            client.pjstr(name);
         }
 
         if (params.length > 0) {
@@ -425,9 +517,8 @@ export function packObjConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

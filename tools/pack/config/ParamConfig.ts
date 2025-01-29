@@ -2,6 +2,7 @@ import ScriptVarType from '#/cache/config/ScriptVarType.js';
 
 import { ConfigValue, ConfigLine, packStepError, PackedData, isConfigBoolean, getConfigBoolean } from '#tools/pack/config/PackShared.js';
 import { CategoryPack, EnumPack, InterfacePack, InvPack, LocPack, NpcPack, ObjPack, ParamPack, SeqPack, SoundPack, SpotAnimPack, StructPack, VarpPack } from '#/util/PackFile.js';
+import Packet from '#/io/Packet.js';
 
 const stats: (string | null)[] = [
     'attack',
@@ -211,8 +212,7 @@ export function parseParamConfig(key: string, value: string): ConfigValue | null
     }
 }
 
-export function packParamConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(ParamPack.size);
+export function packParamConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(ParamPack.size);
 
     for (let i = 0; i < ParamPack.size; i++) {
@@ -251,9 +251,8 @@ export function packParamConfigs(configs: Map<string, ConfigLine[]>): { client: 
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server: server };
 }

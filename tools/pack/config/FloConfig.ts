@@ -60,41 +60,40 @@ export function parseFloConfig(key: string, value: string): ConfigValue | null |
     }
 }
 
-export function packFloConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(FloPack.size);
+export function packFloConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(FloPack.size);
 
-    for (let i = 0; i < FloPack.size; i++) {
-        const debugname = FloPack.getById(i);
-        const config = configs.get(debugname)!;
+    // for (let i = 0; i < FloPack.size; i++) {
+    //     const debugname = FloPack.getById(i);
+    //     const config = configs.get(debugname)!;
+    //
+    //     for (let j = 0; j < config.length; j++) {
+    //         const { key, value } = config[j];
+    //
+    //         if (key === 'rgb') {
+    //             client.p1(1);
+    //             client.p3(value as number);
+    //         } else if (key === 'texture') {
+    //             client.p1(2);
+    //             client.p1(value as number);
+    //         } else if (key === 'overlay') {
+    //             if (value === true) {
+    //                 client.p1(3);
+    //             }
+    //         } else if (key === 'occlude') {
+    //             if (value === false) {
+    //                 client.p1(5);
+    //             }
+    //         }
+    //     }
+    //
+    //     // yes, this was originally transmitted!
+    //     client.p1(6);
+    //     client.pjstr(debugname);
+    //
+    //     client.next();
+    //     server.next();
+    // }
 
-        for (let j = 0; j < config.length; j++) {
-            const { key, value } = config[j];
-
-            if (key === 'rgb') {
-                client.p1(1);
-                client.p3(value as number);
-            } else if (key === 'texture') {
-                client.p1(2);
-                client.p1(value as number);
-            } else if (key === 'overlay') {
-                if (value === true) {
-                    client.p1(3);
-                }
-            } else if (key === 'occlude') {
-                if (value === false) {
-                    client.p1(5);
-                }
-            }
-        }
-
-        // yes, this was originally transmitted!
-        client.p1(6);
-        client.pjstr(debugname);
-
-        client.next();
-        server.next();
-    }
-
-    return { client, server };
+    return { server };
 }

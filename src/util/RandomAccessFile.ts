@@ -18,6 +18,10 @@ export default class RandomAccessFile {
         return fs.fstatSync(this.fd).size;
     }
 
+    get size(): number {
+        return this.length;
+    }
+
     gdata(length: number): Buffer {
         const buffer = Buffer.alloc(length);
         fs.readSync(this.fd, buffer, 0, length, this.pos);

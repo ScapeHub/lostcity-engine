@@ -24,14 +24,17 @@ export default class Js5Index {
             this.metaChannel.seek(file * 6);
             this.metaChannel.read(Js5Index.buffer, 0, 6);
 
-            let sector = (0xff00 & Js5Index.buffer[4] << 8) + ((0xff & Js5Index.buffer[3]) << 16) + (0xff & Js5Index.buffer[5]);
-            const size = (0xff & Js5Index.buffer[2]) + ((Js5Index.buffer[0] & 0xff) << 16) + ((0xff & Js5Index.buffer[1]) << 8);
+            let sector = (Js5Index.buffer[5] & 0xff) + ((Js5Index.buffer[3] & 0xff) << 16) + ((Js5Index.buffer[4] & 0xff) << 8);
+            const size = ((Js5Index.buffer[0] & 0xff) << 16) + (Js5Index.buffer[2] & 0xff) + ((Js5Index.buffer[1] & 0xff) << 8);
+
+            // let sector = (0xff00 & Js5Index.buffer[4] << 8) + ((0xff & Js5Index.buffer[3]) << 16) + (0xff & Js5Index.buffer[5]);
+            // const size = (0xff & Js5Index.buffer[2]) + ((Js5Index.buffer[0] & 0xff) << 16) + ((0xff & Js5Index.buffer[1]) << 8);
 
             if (size < 0 || size > this.maxLength) {
                 return null;
             }
 
-            if (sector <= 0 || this.dataChannel.size / 520 < sector) {
+            if (sector <= 0 || Math.floor(this.dataChannel.size / 520) < sector) {
                 return null;
             }
 
@@ -52,16 +55,21 @@ export default class Js5Index {
 
                 this.dataChannel.read(Js5Index.buffer, 0, 8 + available);
 
-                const sectorFile = (0xff00 & Js5Index.buffer[0] << 8) + (0xff & Js5Index.buffer[1]);
-                const nextSector = (Js5Index.buffer[6] & 0xff) + ((0xff & Js5Index.buffer[5]) << 8) + ((0xff & Js5Index.buffer[4]) << 16);
-                const sectorPart = (0xff00 & Js5Index.buffer[2] << 8) + (0xff & Js5Index.buffer[3]);
-                const sectorStore = 0xff & Js5Index.buffer[7];
+                const sectorFile = (Js5Index.buffer[1] & 0xff) + ((Js5Index.buffer[0] & 0xff) << 8);
+                const nextSector = ((Js5Index.buffer[5] & 0xff) << 8) + ((Js5Index.buffer[4] & 0xff) << 16) + (Js5Index.buffer[6] & 0xff);
+                const sectorPart = (Js5Index.buffer[3] & 0xff) + ((Js5Index.buffer[2] & 0xff) << 8);
+                const sectorStore = Js5Index.buffer[7] & 0xff;
+
+                // const sectorFile = (0xff00 & Js5Index.buffer[0] << 8) + (0xff & Js5Index.buffer[1]);
+                // const nextSector = (Js5Index.buffer[6] & 0xff) + ((0xff & Js5Index.buffer[5]) << 8) + ((0xff & Js5Index.buffer[4]) << 16);
+                // const sectorPart = (0xff00 & Js5Index.buffer[2] << 8) + (0xff & Js5Index.buffer[3]);
+                // const sectorStore = 0xff & Js5Index.buffer[7];
 
                 if (file != sectorFile || part != sectorPart || this.store != sectorStore) {
                     return null;
                 }
 
-                if (nextSector < 0 || this.dataChannel.size / 520 < nextSector) {
+                if (nextSector < 0 || Math.floor(this.dataChannel.size / 520) < nextSector) {
                     return null;
                 }
 
@@ -110,12 +118,12 @@ export default class Js5Index {
                     + ((Js5Index.buffer[3] & 0xff) << 16)
                     + ((Js5Index.buffer[4] & 0xff) << 8);
 
-                if (sector <= 0 || this.dataChannel.size / 520 < sector) {
+                if (sector <= 0 || Math.floor(this.dataChannel.size / 520) < sector) {
                     return false;
                 }
             }
             else {
-                sector = ((519 + this.dataChannel.size) / 520);
+                sector = Math.floor(((519 + this.dataChannel.size) / 520));
 
                 if (sector == 0) {
                     sector = 1;
@@ -147,24 +155,28 @@ export default class Js5Index {
                         break;
                     }
 
-                    nextSector = (Js5Index.buffer[6] & 0xff) + (Js5Index.buffer[4] << 16 & 0xff0000) + (0xff00 & Js5Index.buffer[5] << 8);
-
-                    const sectorFile = (Js5Index.buffer[1] & 0xff) + (Js5Index.buffer[0] << 8 & 0xff00);
+                    nextSector = ((Js5Index.buffer[5] & 0xff) << 8) + ((Js5Index.buffer[4] & 0xff) << 16) + (Js5Index.buffer[6] & 0xff);
+                    const sectorFile = (Js5Index.buffer[1] & 0xff) + ((Js5Index.buffer[0] & 0xff) << 8);
                     const sectorStore = Js5Index.buffer[7] & 0xff;
-                    const sectorPart = (Js5Index.buffer[3] & 0xff) + ((0xff & Js5Index.buffer[2]) << 8);
+                    const sectorPart = (Js5Index.buffer[3] & 255) + ((Js5Index.buffer[2] & 255) << 8);
+
+                    // nextSector = (Js5Index.buffer[6] & 0xff) + (Js5Index.buffer[4] << 16 & 0xff0000) + (0xff00 & Js5Index.buffer[5] << 8);
+                    // const sectorFile = (Js5Index.buffer[1] & 0xff) + (Js5Index.buffer[0] << 8 & 0xff00);
+                    // const sectorStore = Js5Index.buffer[7] & 0xff;
+                    // const sectorPart = (Js5Index.buffer[3] & 0xff) + ((0xff & Js5Index.buffer[2]) << 8);
 
                     if (file != sectorFile || part != sectorPart || this.store != sectorStore) {
                         return false;
                     }
 
-                    if (nextSector < 0 || this.dataChannel.size / 520 < nextSector) {
+                    if (nextSector < 0 || Math.floor(this.dataChannel.size / 520) < nextSector) {
                         return false;
                     }
                 }
 
                 if (nextSector == 0) {
                     overwrite = false;
-                    nextSector = ((519 + this.dataChannel.size) / 520);
+                    nextSector = Math.floor(((519 + this.dataChannel.size) / 520));
 
                     if (nextSector == 0) {
                         nextSector++;

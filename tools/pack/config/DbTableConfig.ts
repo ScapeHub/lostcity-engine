@@ -77,7 +77,6 @@ export function parseDbTableConfig(key: string, value: string): ConfigValue | nu
 }
 
 export function packDbTableConfigs(configs: Map<string, ConfigLine[]>) {
-    const client: PackedData = new PackedData(DbTablePack.size);
     const server: PackedData = new PackedData(DbTablePack.size);
 
     for (let i = 0; i < DbTablePack.size; i++) {
@@ -177,9 +176,8 @@ export function packDbTableConfigs(configs: Map<string, ConfigLine[]>) {
             }
         }
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

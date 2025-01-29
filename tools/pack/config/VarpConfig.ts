@@ -3,6 +3,8 @@ import VarPlayerType from '#/cache/config/VarPlayerType.js';
 
 import { PackedData, ConfigValue, ConfigLine, isConfigBoolean, getConfigBoolean } from '#tools/pack/config/PackShared.js';
 import { VarpPack } from '#/util/PackFile.js';
+import Js5Archive from '#/js5/Js5Archive.js';
+import Packet from '#/io/Packet.js';
 
 export function parseVarpConfig(key: string, value: string): ConfigValue | null | undefined {
     const stringKeys: string[] = [];
@@ -66,8 +68,34 @@ export function parseVarpConfig(key: string, value: string): ConfigValue | null 
     }
 }
 
-export function packVarpConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData; server: PackedData } {
-    const client: PackedData = new PackedData(VarpPack.size);
+export function packJs5VarpConfigs(configs: Map<string, ConfigLine[]>, archive: Js5Archive): void {
+    for (let i = 0; i < VarpPack.size; i++) {
+        const client = Packet.alloc(1);
+        const debugname = VarpPack.getById(i);
+        const config = configs.get(debugname)!;
+
+        try{
+            for (let j = 0; j < config.length; j++) {
+                const { key, value } = config[j];
+
+                if (key === 'clientcode') {
+                    client.p1(5);
+                    client.p2(value as number);
+                }
+            }
+
+            client.p1(0);
+
+            archive.writeFile(16, i, client.data.subarray(0, client.pos));
+        }
+        catch (err) {
+            console.error(`failed to pack varp ${i} name=${debugname}, config=${JSON.stringify(config)}, err:`, err);
+            throw err;
+        }
+    }
+}
+
+export function packVarpConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(VarpPack.size);
 
     for (let i = 0; i < VarpPack.size; i++) {
@@ -87,9 +115,6 @@ export function packVarpConfigs(configs: Map<string, ConfigLine[]>): { client: P
                 if (value === false) {
                     server.p1(4);
                 }
-            } else if (key === 'clientcode') {
-                client.p1(5);
-                client.p2(value as number);
             } else if (key === 'transmit') {
                 if (value === true) {
                     server.p1(6);
@@ -100,9 +125,8 @@ export function packVarpConfigs(configs: Map<string, ConfigLine[]>): { client: P
         server.p1(250); // todo: maybe this was opcode 10?
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

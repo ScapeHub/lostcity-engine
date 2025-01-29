@@ -15,9 +15,10 @@ export default class Js5FileChannel {
     public size: number = 0;
 
     constructor(file: RandomAccessFile, bufferSize: number) {
+        this.writePointer = -1;
+        this.aLong1596 = -1;
         this.file = file;
-        this.size = file.length;
-        this.writeIndex = file.length;
+        this.size = this.writeIndex = this.file.length;
         this.writePayload = new Uint8Array(0);
         this.readPayload = new Uint8Array(bufferSize);
         this.readPointer = 0;
@@ -25,7 +26,7 @@ export default class Js5FileChannel {
 
     public seek(pointer: number): void {
         if (pointer < 0) {
-            return;
+            throw new Error('Seek position cannot be negative.');
         }
 
         this.readPointer = pointer;
@@ -95,13 +96,13 @@ export default class Js5FileChannel {
                     l_0_ = this.readPointer;
                 }
                 else if (this.readPointer <= this.aLong1596 && this.aLong1596 < this.readPointer + length) {
-                    l = this.aLong1596;
+                    l_0_ = this.aLong1596;
                 }
 
                 if (this.aLong1596 < this.readPointer + length && this.aLong1596 + this.readPayloadLength >= length + this.readPointer) {
                     l = length + this.readPointer;
                 }
-                else if (this.aLong1596 + this.readPayloadLength > this.readPointer && length + this.readPointer > this.readPayloadLength + this.aLong1596) {
+                else if (this.aLong1596 + this.readPayloadLength > this.readPointer && length + this.readPointer >= this.readPayloadLength + this.aLong1596) {
                     l = this.readPayloadLength + this.aLong1596;
                 }
 
@@ -178,7 +179,7 @@ export default class Js5FileChannel {
                 let i_5_ = 0;
                 for (; length > 0; length -= i_5_) {
                     i_5_ = this.file.read(b, offset, length);
-                    if (i_5_ == -1) {
+                    if (i_5_ == 0) {
                         break;
                     }
 
@@ -255,7 +256,7 @@ export default class Js5FileChannel {
         this.file.write(this.writePayload, 0, this.writePayloadLength);
         this.accessFilePointer += this.writePayloadLength;
 
-        if (this.accessFilePointer >= this.writeIndex) {
+        if (this.accessFilePointer > this.writeIndex) {
             this.writeIndex = this.accessFilePointer;
         }
 

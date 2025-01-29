@@ -4,19 +4,6 @@ import Js5FileChannel from '#/js5/Js5FileChannel.js';
 import Js5Index from '#/js5/Js5Index.js';
 
 export default class Js5 {
-    private _interfaceArchive?: Js5Archive;
-    private _configArchive?: Js5Archive;
-    private _skeletonArchive?: Js5Archive;
-    private _skinArchive?: Js5Archive;
-    private _soundArchive?: Js5Archive;
-    private _worldMapArchive?: Js5Archive;
-    private _musicArchive?: Js5Archive;
-    private _modelArchive?: Js5Archive;
-    private _spriteArchive?: Js5Archive;
-    private _textureArchive?: Js5Archive;
-    private _huffmanArchive?: Js5Archive;
-    private _jingleArchive?: Js5Archive;
-
     private readonly _dataFile: RandomAccessFile;
     private readonly _indexFiles: RandomAccessFile[];
     private readonly _metadataFile: RandomAccessFile;
@@ -27,9 +14,13 @@ export default class Js5 {
 
     private readonly _metadataIndex: Js5Index;
 
+    public readonly archives: Js5Archive[];
+
     constructor(directory: string, indexCount: number) {
         // create cache files
         this._indexFiles = Array(indexCount);
+        this.archives = Array(indexCount);
+
         this._dataFile = new RandomAccessFile(`${directory}/main_file_cache.dat2`);
         this._metadataFile = new RandomAccessFile(`${directory}/main_file_cache.idx255`);
         for (let i = 0; i < indexCount; i++) {
@@ -46,69 +37,69 @@ export default class Js5 {
 
         // load metadata index
         this._metadataIndex = new Js5Index(255, this._metadataChannel, this._dataChannel, 500000);
+
+        // load archives
+        for (let i = 0; i < indexCount; i++) {
+            this.archives[i] = this.loadArchive(i);
+        }
     }
 
-    public pack() {
-        this.skeletonCacheArchive.pack();
-        this.skinCacheArchive.pack();
-        this.configArchive.pack();
-        this.interfaceArchive.pack();
-        this.soundArchive.pack();
-        this.worldMapArchive.pack();
-        this.musicArchive.pack();
-        this.modelArchive.pack();
-        this.spriteArchive.pack();
-        this.textureArchive.pack();
-        this.huffmanArchive.pack();
-        this.jingleArchive.pack();
+    public pack(): void {
+        this.archives.forEach(archive => archive.pack());
     }
 
-    public get skeletonCacheArchive(): Js5Archive {
-        return (this._skeletonArchive ??= this.loadArchive(0));
+    public close(): void {
+        this._dataFile.close();
+        this._indexFiles.forEach(file => file.close());
+        this._metadataFile.close();
+    }
+
+    public get skeletonArchive(): Js5Archive {
+        return this.archives[1];
     }
 
     public get skinCacheArchive(): Js5Archive {
-        return (this._skinArchive ??= this.loadArchive(1));
+        return this.archives[0];
     }
 
     public get configArchive(): Js5Archive {
-        return (this._configArchive ??= this.loadArchive(2));
+        return this.archives[2];
     }
 
     public get interfaceArchive(): Js5Archive {
-        return (this._interfaceArchive ??= this.loadArchive(3));
+        return this.archives[3];
     }
 
     public get soundArchive(): Js5Archive {
-        return (this._soundArchive ??= this.loadArchive(4));
+        return this.archives[4];
     }
 
     public get worldMapArchive(): Js5Archive {
-        return (this._worldMapArchive ??= this.loadArchive(5));
+        return this.archives[5];
     }
 
     public get musicArchive(): Js5Archive {
-        return (this._musicArchive ??= this.loadArchive(6));
+        return this.archives[6];
     }
 
     public get modelArchive(): Js5Archive {
-        return (this._modelArchive ??= this.loadArchive(7));
+        return this.archives[7];
     }
 
     public get spriteArchive(): Js5Archive {
-        return (this._spriteArchive ??= this.loadArchive(8));
+        return this.archives[8];
     }
 
     public get textureArchive(): Js5Archive {
-        return (this._textureArchive ??= this.loadArchive(9));
+        return this.archives[9];
     }
 
     public get huffmanArchive(): Js5Archive {
-        return (this._huffmanArchive ??= this.loadArchive(10));
+        return this.archives[10];
     }
 
     public get jingleArchive(): Js5Archive {
-        return (this._jingleArchive ??= this.loadArchive(11));
+        return this.archives[11];
     }
 
     private loadArchive(id: number): Js5Archive {

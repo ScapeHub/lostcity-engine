@@ -5,6 +5,9 @@ tsconfig.tsbuildinfo
 
 data/pack/
 
+# added
+data/cache/packed/
+
 # since these are generated for the server only, we don't have to share them
 data/src/pack/script.pack
 data/src/pack/param.pack

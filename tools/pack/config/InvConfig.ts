@@ -2,6 +2,7 @@ import InvType from '#/cache/config/InvType.js';
 
 import { ConfigValue, ConfigLine, PackedData, isConfigBoolean, getConfigBoolean } from '#tools/pack/config/PackShared.js';
 import { InvPack, ObjPack } from '#/util/PackFile.js';
+import Packet from '#/io/Packet.js';
 
 export function parseInvConfig(key: string, value: string): ConfigValue | null | undefined {
     const stringKeys: string[] = [];
@@ -92,8 +93,7 @@ export function parseInvConfig(key: string, value: string): ConfigValue | null |
     }
 }
 
-export function packInvConfigs(configs: Map<string, ConfigLine[]>): { client: PackedData, server: PackedData } {
-    const client: PackedData = new PackedData(InvPack.size);
+export function packInvConfigs(configs: Map<string, ConfigLine[]>): { server: PackedData } {
     const server: PackedData = new PackedData(InvPack.size);
 
     for (let i = 0; i < InvPack.size; i++) {
@@ -161,9 +161,8 @@ export function packInvConfigs(configs: Map<string, ConfigLine[]>): { client: Pa
         server.p1(250);
         server.pjstr(debugname);
 
-        client.next();
         server.next();
     }
 
-    return { client, server };
+    return { server };
 }

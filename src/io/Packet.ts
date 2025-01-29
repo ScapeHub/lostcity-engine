@@ -233,12 +233,27 @@ export default class Packet extends DoublyLinkable {
         fs.writeFileSync(filePath, compressed);
     }
 
+    compressGzip(length: number = this.pos, start: number = 0) {
+        const compressed = zlib.gzipSync(this.data.subarray(start, start + length));
+        compressed[9] = 0;
+        return compressed;
+    }
+
     p1(value: number): void {
         this.#view.setUint8(this.pos++, value);
     }
 
+    p1b(value: number): void {
+        this.#view.setInt8(this.pos++, value);
+    }
+
     p2(value: number): void {
         this.#view.setUint16(this.pos, value);
+        this.pos += 2;
+    }
+
+    p2b(value: number): void {
+        this.#view.setInt16(this.pos, value);
         this.pos += 2;
     }
 
@@ -273,6 +288,14 @@ export default class Packet extends DoublyLinkable {
     }
 
     pjstr(str: string, terminator: number = 10): void {
+        const length: number = str.length;
+        for (let i: number = 0; i < length; i++) {
+            this.#view.setUint8(this.pos++, str.charCodeAt(i));
+        }
+        this.#view.setUint8(this.pos++, terminator);
+    }
+
+    pstr(str: string, terminator: number = 0): void {
         const length: number = str.length;
         for (let i: number = 0; i < length; i++) {
             this.#view.setUint8(this.pos++, str.charCodeAt(i));
@@ -368,6 +391,16 @@ export default class Packet extends DoublyLinkable {
     }
 
     gjstr(terminator = 10): string {
+        const length: number = this.data.length;
+        let str: string = '';
+        let b: number;
+        while ((b = this.#view.getUint8(this.pos++)) !== terminator && this.pos < length) {
+            str += String.fromCharCode(b);
+        }
+        return str;
+    }
+
+    gstr(terminator = 0): string {
         const length: number = this.data.length;
         let str: string = '';
         let b: number;
@@ -475,8 +508,9 @@ export default class Packet extends DoublyLinkable {
     }
 
     decrypt(keys: Int32Array, bufferStart: number, bufferLength: number) {
-        const blockCount = (bufferLength - bufferStart) / 8;
+        const blockCount = Math.floor((bufferLength - bufferStart) / 8);
         const originalPosition = this.pos;
+        this.pos = bufferStart;
 
         for (let block = 0; blockCount > block; block++) {
             let v0 = this.g4();
@@ -495,6 +529,39 @@ export default class Packet extends DoublyLinkable {
             this.p4(v1);
         }
         this.pos = originalPosition;
+    }
+
+    encrypt(keys: Int32Array, bufferStart: number, bufferLength: number) {
+        try {
+            const blockCount = Math.floor((bufferLength - bufferStart) / 8);
+            const originalPosition = this.pos;
+            this.pos = bufferStart;
+
+            for (let block = 0; blockCount > block; block++) {
+                let v0 = this.g4();
+                let v1 = this.g4();
+    
+                let sum = 0;
+    
+                for (let i = 0; i < Packet.roundCount; i++) {
+                    // v1 += (v0 >>> 5 ^ v0 << 4) + v0 ^ sum + keys[~0x71dffffc & sum >>> 11];
+                    // sum += Packet.delta;
+                    // v0 += (v1 >>> 5 ^ v1 << 4) + v1 ^ keys[0x3 & sum] + sum;
+    
+                    v0 += (((v1 << 4) ^ (v1 >>> 5)) + v1) ^ (sum + keys[sum & 3]);
+                    sum += Packet.delta;
+                    v1 += (((v0 << 4) ^ (v0 >>> 5)) + v0) ^ (sum + keys[(sum >>> 11) & 3]);
+                }
+    
+                this.pos -= 8;
+                this.p4(v0);
+                this.p4(v1);
+            }
+            this.pos = originalPosition;
+        }
+        catch (err) {
+            console.log('failed to encrypt packet:', err);
+        }
     }
 
     // later revs have tinyenc/tinydec methods

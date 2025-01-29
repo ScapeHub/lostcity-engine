@@ -31,7 +31,7 @@ export class PackFile {
         if (this.validator !== null) {
             this.validator(this, ...this.validatorArgs);
         } else {
-            this.load(`${Environment.BUILD_SRC_DIR}/pack/${this.type}.pack`);
+            this.load(`./data/cache/unpacked/pack/${this.type}.pack`);
         }
     }
 
@@ -52,6 +52,11 @@ export class PackFile {
             const parts = line.split('=');
             if (parts[1].length === 0) {
                 throw new Error(`Pack file has an empty name ${path}:${i + 1}`);
+            }
+
+            // interfaces use group:id - we want to exclude these and only load group ids
+            if (parts[0].includes(':')) {
+                continue;
             }
 
             this.register(parseInt(parts[0]), parts[1]);
@@ -267,26 +272,36 @@ export const CategoryPack = new PackFile('category', validateCategoryPack);
 export const DbRowPack = new PackFile('dbrow', validateConfigPack, '.dbrow', true, false, false, true);
 export const DbTablePack = new PackFile('dbtable', validateConfigPack, '.dbtable', true, false, false, true);
 export const EnumPack = new PackFile('enum', validateConfigPack, '.enum', true, false, false, true);
-export const FloPack = new PackFile('flo', validateConfigPack, '.flo');
 export const HuntPack = new PackFile('hunt', validateConfigPack, '.hunt', true, false, false, true);
-export const IdkPack = new PackFile('idk', validateConfigPack, '.idk');
-export const InterfacePack = new PackFile('interface', validateInterfacePack);
-export const InvPack = new PackFile('inv', validateConfigPack, '.inv', true);
-export const LocPack = new PackFile('loc', validateConfigPack, '.loc');
-export const MesAnimPack = new PackFile('mesanim', validateConfigPack, '.mesanim', true, false, false, true);
-export const ModelPack = new PackFile('model', validateFilesPack, `${Environment.BUILD_SRC_DIR}/models`, '.ob2');
-export const NpcPack = new PackFile('npc', validateConfigPack, '.npc');
-export const ObjPack = new PackFile('obj', validateConfigPack, '.obj');
 export const ParamPack = new PackFile('param', validateConfigPack, '.param', true, false, false, true);
 export const ScriptPack = new PackFile('script', regenScriptPack);
-export const SeqPack = new PackFile('seq', validateConfigPack, '.seq');
-export const SoundPack = new PackFile('sound', validateFilesPack, `${Environment.BUILD_SRC_DIR}/sounds`, '.synth');
-export const SpotAnimPack = new PackFile('spotanim', validateConfigPack, '.spotanim');
 export const StructPack = new PackFile('struct', validateConfigPack, '.struct', true, false, false, true);
-export const TexturePack = new PackFile('texture', validateImagePack, `${Environment.BUILD_SRC_DIR}/textures`, '.png');
-export const VarpPack = new PackFile('varp', validateConfigPack, '.varp', true);
 export const VarnPack = new PackFile('varn', validateConfigPack, '.varn', true, false, false, true);
 export const VarsPack = new PackFile('vars', validateConfigPack, '.vars', true, false, false, true);
+// added
+export const HuffmanPack = new PackFile('huffman');
+export const JinglePack = new PackFile('jingle');
+export const MusicPack = new PackFile('music');
+export const SoundPack = new PackFile('sound');
+export const SkeletonPack = new PackFile('skeleton');
+export const ModelPack = new PackFile('model');
+export const TexturePack = new PackFile('texture');
+export const SkinPack = new PackFile('skin');
+export const SpritePack = new PackFile('sprite');
+export const MapPack = new PackFile('map');
+export const InterfacePack = new PackFile('interface');
+export const VarpPack = new PackFile('varp');
+export const VarbitPack = new PackFile('varbit');
+export const InvPack = new PackFile('inv');
+export const LocPack = new PackFile('loc');
+export const SeqPack = new PackFile('seq');
+export const SpotAnimPack = new PackFile('spotanim');
+export const FloPack = new PackFile('flo');
+export const FluPack = new PackFile('flu');
+export const IdkPack = new PackFile('idk');
+export const MesAnimPack = new PackFile('mesanim');
+export const NpcPack = new PackFile('npc');
+export const ObjPack = new PackFile('obj');
 
 export function revalidatePack() {
     AnimPack.reload();

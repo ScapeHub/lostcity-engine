@@ -10,6 +10,14 @@ export function genHash(name: string): number {
     return hash;
 }
 
+export function genJagHash(name: string): number {
+    let hash = 0;
+    for (let i = 0; name.length > i; i++) {
+        hash = -hash + ((hash << 5) + (0xff & name.charCodeAt(i)));
+    }
+    return hash;
+}
+
 type JagQueueFile = {
     hash: number;
     name: string;
