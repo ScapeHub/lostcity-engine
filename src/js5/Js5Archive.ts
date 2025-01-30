@@ -567,7 +567,7 @@ export default class Js5Archive {
         } else if (type == 1) {
             compressed = BZip2.compress(cacheData, false, true);
         } else if (type == 2) {
-            compressed = gzipCompress(cacheData, 9, cacheData.length);
+            compressed = gzipCompress(cacheData, 0, cacheData.length);
         } else {
             throw new Error(`Invalid compression type: ${type}`);
         }
@@ -578,9 +578,6 @@ export default class Js5Archive {
         }
         if (group) {
             length += 2;
-        }
-        if (group?.keys) {
-            length += 4;
         }
 
         const packet = Packet.allocDirect(length);

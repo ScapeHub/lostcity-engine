@@ -40,9 +40,9 @@ export function gunzipDataSync(compressedData: Uint8Array, offset: number, lengt
 }
 
 export function gzipCompress(data: Uint8Array, offset: number, length: number): Uint8Array {
-    const gzipBuffer = Buffer.from(data.buffer, offset, length);
-    const compressed = zlib.gzipSync(gzipBuffer);
-    return new Uint8Array(compressed.buffer, compressed.byteOffset, compressed.byteLength);
+    const compressed = zlib.gzipSync(data.subarray(offset, offset + length));
+    compressed[9] = 0;
+    return compressed;
 }
 
 

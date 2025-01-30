@@ -49,8 +49,13 @@ function generateKeys(secureRandom: () => number = () => Math.floor(Math.random(
 
 function writeKeys(keys: XteaKey[]): void {
     try {
+        const processedKeys = keys.map(key => ({
+            ...key,
+            keys: Array.from(key.keys), // Convert Int32Array to a regular array
+        }));
+
         // Convert the JavaScript object to a JSON string
-        const jsonData = JSON.stringify(keys, null, 4); // Pretty-print with 4 spaces
+        const jsonData = JSON.stringify(processedKeys, null, 4); // Pretty-print with 4 spaces
         // Write the JSON string to the file
         fs.writeFileSync('./data/cache/packed/keys.json', jsonData, 'utf8');
     } catch (error) {
@@ -166,7 +171,7 @@ export function packNamedEncryptedBinaryGroupFiles(archive: Js5Archive, path: st
         }
 
         const keys = name.startsWith('m') ? undefined : generateKeys();
-        archive.writeNamedGroup(id, name, 0, data);
+        archive.writeNamedGroup(id, name, 0, data, keys);
 
         if (keys) {
             xteaKeys.push({ name, keys });

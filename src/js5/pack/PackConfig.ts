@@ -30,7 +30,7 @@ export async function packJs5Config(archive: Js5Archive) {
 }
 
 async function parseConfigFile(archive: Js5Archive, ext: string, parse: ConfigParseCallback, pack: ConfigPackCallback) {
-    console.log(`packing ${ext}...`);
+    console.log(`Packing ${ext}`);
 
     const file = './data/cache/unpacked/config/all.' + ext;
     const reader = readline.createInterface({
@@ -110,10 +110,6 @@ async function parseConfigFile(archive: Js5Archive, ext: string, parse: ConfigPa
                 throw parseStepError(file, lineNumber, `Invalid property value: ${line}`);
             } else if (typeof parsed === 'undefined') {
                 throw parseStepError(file, lineNumber, `Invalid property key: ${line}`);
-            }
-
-            if (debugname == 'loc_17163') {
-                console.log(key, parsed);
             }
 
             config.push({ key, value: parsed });
