@@ -9,7 +9,7 @@ if (Environment.BUILD_STARTUP_UPDATE) {
 
 try {
     await packServer();
-    await packClient();
+    // await packClient();
 } catch (err) {
     if (err instanceof Error) {
         console.log(err.message);

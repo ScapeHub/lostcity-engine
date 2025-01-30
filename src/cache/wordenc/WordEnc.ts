@@ -36,16 +36,16 @@ export default class WordEnc {
     private static whitelist = ['cook', "cook's", 'cooks', 'seeks', 'sheet'];
 
     static load(dir: string): void {
-        if (!fs.existsSync(`${dir}/client/wordenc`)) {
+        if (!fs.existsSync(`${dir}/wordenc`)) {
             return;
         }
 
-        const wordenc = Jagfile.load(`${dir}/client/wordenc`);
+        const wordenc = Jagfile.load(`${dir}/wordenc`);
         this.readAll(wordenc);
     }
 
     static async loadAsync(dir: string): Promise<void> {
-        const file = await fetch(`${dir}/client/wordenc`);
+        const file = await fetch(`${dir}/wordenc`);
         if (!file.ok) {
             return;
         }

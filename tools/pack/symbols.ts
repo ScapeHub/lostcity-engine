@@ -1,5 +1,5 @@
 import fs from 'fs';
-import { loadDir, loadPack } from '#/util/NameMap.js';
+import { loadBitPackedPack, loadDir, loadPack } from '#/util/NameMap.js';
 import ParamType from '#/cache/config/ParamType.js';
 import DbTableType from '#/cache/config/DbTableType.js';
 import ScriptVarType from '#/cache/config/ScriptVarType.js';
@@ -43,14 +43,14 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/constant.sym', constantSymbols);
 
     let npcSymbols = '';
-    const npcs = loadPack('data/src/pack/npc.pack');
+    const npcs = loadPack('data/cache/unpacked/pack/npc.pack');
     for (let i = 0; i < npcs.length; i++) {
         npcSymbols += `${i}\t${npcs[i]}\n`;
     }
     fs.writeFileSync('data/symbols/npc.sym', npcSymbols);
 
     let objSymbols = '';
-    const objs = loadPack('data/src/pack/obj.pack');
+    const objs = loadPack('data/cache/unpacked/pack/obj.pack');
     for (let i = 0; i < objs.length; i++) {
         objSymbols += `${i}\t${objs[i]}\n`;
     }
@@ -59,7 +59,7 @@ export function generateServerSymbols() {
     InvType.load('data/pack');
     let invSymbols = '';
     let writeInvSymbols = '';
-    const invs = loadPack('data/src/pack/inv.pack');
+    const invs = loadPack('data/cache/unpacked/pack/inv.pack');
     for (let i = 0; i < invs.length; i++) {
         if (!invs[i]) {
             continue;
@@ -73,7 +73,7 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/writeinv.sym', writeInvSymbols);
 
     let seqSymbols = '';
-    const seqs = loadPack('data/src/pack/seq.pack');
+    const seqs = loadPack('data/cache/unpacked/pack/seq.pack');
     for (let i = 0; i < seqs.length; i++) {
         if (!seqs[i]) {
             continue;
@@ -84,7 +84,7 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/seq.sym', seqSymbols);
 
     let idkSymbols = '';
-    const idks = loadPack('data/src/pack/idk.pack');
+    const idks = loadPack('data/cache/unpacked/pack/idk.pack');
     for (let i = 0; i < idks.length; i++) {
         if (!idks[i]) {
             continue;
@@ -95,7 +95,7 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/idk.sym', idkSymbols);
 
     let spotanimSymbols = '';
-    const spotanims = loadPack('data/src/pack/spotanim.pack');
+    const spotanims = loadPack('data/cache/unpacked/pack/spotanim.pack');
     for (let i = 0; i < spotanims.length; i++) {
         if (!spotanims[i]) {
             continue;
@@ -106,7 +106,7 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/spotanim.sym', spotanimSymbols);
 
     let locSymbols = '';
-    const locs = loadPack('data/src/pack/loc.pack');
+    const locs = loadPack('data/cache/unpacked/pack/loc.pack');
     for (let i = 0; i < locs.length; i++) {
         if (!locs[i]) {
             continue;
@@ -119,34 +119,24 @@ export function generateServerSymbols() {
     Component.load('data/pack');
     let comSymbols = '';
     let interfaceSymbols = '';
-    let overlaySymbols = '';
-    const coms = loadPack('data/src/pack/interface.pack');
-    for (let i = 0; i < coms.length; i++) {
-        if (!coms[i] || coms[i] === 'null:null') {
-            continue;
+    // let overlaySymbols = '';
+    const coms = loadBitPackedPack('data/cache/unpacked/pack/interface.pack');
+    for (const [key, name] of coms) {
+        if (name.includes(':')) {
+            comSymbols += `${key}\t${name}\n`;
         }
-
-        const com = Component.get(i);
-        if (coms[i].indexOf(':') !== -1) {
-            comSymbols += `${i}\t${coms[i]}\n`;
-        } else if (com.overlay) {
-            overlaySymbols += `${i}\t${coms[i]}\n`;
-        } else {
-            interfaceSymbols += `${i}\t${coms[i]}\n`;
-        }
-
-        // temporary: until compiler updates
-        if (com.overlay) {
-            interfaceSymbols += `${i}\t${coms[i]}\n`;
+        else {
+            interfaceSymbols += `${key}\t${name}\n`;
         }
     }
+
     fs.writeFileSync('data/symbols/component.sym', comSymbols);
     fs.writeFileSync('data/symbols/interface.sym', interfaceSymbols);
-    fs.writeFileSync('data/symbols/overlayinterface.sym', overlaySymbols);
+    // fs.writeFileSync('data/symbols/overlayinterface.sym', overlaySymbols);
 
     VarPlayerType.load('data/pack');
     let varpSymbols = '';
-    const varps = loadPack('data/src/pack/varp.pack');
+    const varps = loadPack('data/cache/unpacked/pack/varp.pack');
     for (let i = 0; i < varps.length; i++) {
         if (!varps[i]) {
             continue;
@@ -219,15 +209,18 @@ export function generateServerSymbols() {
     fs.writeFileSync('data/symbols/hunt.sym', huntSymbols);
 
     let mesanimSymbols = '';
-    const mesanims = loadPack('data/src/pack/mesanim.pack');
+    const mesanims = loadPack('data/cache/unpacked/pack/mesanim.pack');
     for (let i = 0; i < mesanims.length; i++) {
         mesanimSymbols += `${i}\t${mesanims[i]}\n`;
     }
     fs.writeFileSync('data/symbols/mesanim.sym', mesanimSymbols);
 
     let synthSymbols = '';
-    const synths = loadPack('data/src/pack/sound.pack');
+    const synths = loadPack('data/cache/unpacked/pack/sound.pack');
     for (let i = 0; i < synths.length; i++) {
+        if (!synths[i]) {
+            continue;
+        }
         synthSymbols += `${i}\t${synths[i]}\n`;
     }
     fs.writeFileSync('data/symbols/synth.sym', synthSymbols);

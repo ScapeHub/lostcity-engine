@@ -35,10 +35,10 @@ export async function packServer() {
 
     revalidatePack();
     await packConfigs();
-    packServerInterface();
+    // packServerInterface();
 
-    packServerMap();
-    await packWorldmap();
+    // packServerMap();
+    // await packWorldmap();
 
     generateServerSymbols();
 

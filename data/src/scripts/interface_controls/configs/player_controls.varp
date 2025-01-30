@@ -1,7 +1,0 @@
-[auto_retaliate]
-transmit=yes
-scope=perm
-
-[run]
-clientcode=7
-transmit=yes

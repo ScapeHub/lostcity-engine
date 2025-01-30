@@ -22,8 +22,15 @@ describe('GetMetadata', () => {
     it('loads cache files and checks metadata', () => {
         Js5.open('./data/cache/packed', 12);
 
-        const data = Js5.cache.getGroupData(255, 255);
-        console.log(data?.length);
+        const start = Date.now();
+        Js5.cache.configArchive.unpack();
+        const files = [...Js5.cache.configArchive.listGroupFiles(6)];
+        files.forEach(file => {
+            Js5.cache.configArchive.readFile(6, file.id);
+        })
+
+        const end = Date.now();
+        console.log(end - start);
     });
 });
 

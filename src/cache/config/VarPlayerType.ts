@@ -6,6 +6,7 @@ import { ConfigType } from '#/cache/config/ConfigType.js';
 import ScriptVarType from '#/cache/config/ScriptVarType.js';
 import Jagfile from '#/io/Jagfile.js';
 import { printError } from '#/util/Logger.js';
+import Js5 from '#/js5/Js5.js';
 
 export default class VarPlayerType extends ConfigType {
     private static configNames = new Map<string, number>();
@@ -23,8 +24,7 @@ export default class VarPlayerType extends ConfigType {
         }
 
         const server = Packet.load(`${dir}/server/varp.dat`);
-        const jag = Jagfile.load(`${dir}/client/config`);
-        this.parse(server, jag);
+        this.parse(server);
     }
 
     static async loadAsync(dir: string) {
@@ -33,23 +33,22 @@ export default class VarPlayerType extends ConfigType {
             return;
         }
 
-        const [server, jag] = await Promise.all([file.arrayBuffer(), Jagfile.loadAsync(`${dir}/client/config`)]);
-        this.parse(new Packet(new Uint8Array(server)), jag);
+        const [server] = await Promise.all([file.arrayBuffer()]);
+        this.parse(new Packet(new Uint8Array(server)));
     }
 
-    static parse(server: Packet, jag: Jagfile) {
+    static parse(server: Packet) {
         VarPlayerType.configNames = new Map();
         VarPlayerType.configs = [];
 
         const count = server.g2();
 
-        const client = jag.read('varp.dat')!;
-        client.pos = 2;
-
         for (let id = 0; id < count; id++) {
             const config = new VarPlayerType(id);
+            const client = Js5.cache.configArchive.readFile(16, id);
+
             config.decodeType(server);
-            config.decodeType(client);
+            config.decodeType(new Packet(client));
 
             VarPlayerType.configs[id] = config;
 

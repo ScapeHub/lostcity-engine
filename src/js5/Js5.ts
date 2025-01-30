@@ -3,6 +3,12 @@ import RandomAccessFile from '#/util/RandomAccessFile.js';
 import Js5FileChannel from '#/js5/Js5FileChannel.js';
 import Js5Index from '#/js5/Js5Index.js';
 import Packet from '#/io/Packet.js';
+import fs from 'fs';
+
+type MapKey = {
+    name: string;
+    keys: number[];
+}
 
 export default class Js5 {
     public static cache: Js5;
@@ -17,9 +23,15 @@ export default class Js5 {
 
     private readonly _metadataIndex: Js5Index;
 
+    private readonly _mapKeys: Map<string, Int32Array> = new Map();
+
     public readonly archives: Js5Archive[];
 
     constructor(directory: string, indexCount: number) {
+        if (!fs.existsSync(directory)) {
+            fs.mkdirSync(directory);
+        }
+
         // create cache files
         this._indexFiles = Array(indexCount);
         this.archives = Array(indexCount);
@@ -45,6 +57,9 @@ export default class Js5 {
         for (let i = 0; i < indexCount; i++) {
             this.archives[i] = this.loadArchive(i);
         }
+
+        // load map keys
+        this.loadMapKeys(directory);
     }
 
     public static open(directory: string, indexCount: number = 12) {
@@ -52,6 +67,10 @@ export default class Js5 {
             throw new Error('Js5 cache already open.');
         }
         Js5.cache = new Js5(directory, indexCount);
+    }
+
+    public getMapKeys(mapName: string): Int32Array | undefined {
+        return this._mapKeys.get(mapName);
     }
 
     public getGroupData(archiveId: number, groupId: number): Uint8Array | null {
@@ -135,5 +154,22 @@ export default class Js5 {
     private loadArchive(id: number): Js5Archive {
         const dataIndex = new Js5Index(id, this._indexChannels[id], this._dataChannel, 1000000);
         return new Js5Archive(id, this._metadataIndex, dataIndex);
+    }
+
+    private loadMapKeys(dir: string) {
+        if (!fs.existsSync(`${dir}/keys.json`)) {
+            return;
+        }
+
+        try {
+            const raw = fs.readFileSync(`${dir}/keys.json`, 'utf-8');
+            const data: MapKey[] = JSON.parse(raw);
+            data.forEach(key => {
+                this._mapKeys.set(key.name, new Int32Array(key.keys));
+            });
+        }
+        catch (err) {
+            console.error('Error loading keys.json', err);
+        }
     }
 }

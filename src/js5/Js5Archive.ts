@@ -89,6 +89,24 @@ export default class Js5Archive {
         return file.content;
     }
 
+    public readNamed(name: string, fileId: number, keys?: Int32Array): Uint8Array {
+        if (!this._isMetadataLoaded) {
+            this.decodeMetadata();
+        }
+
+        const group = this.getNamedGroupMetadata(name, true, keys);
+        const file = group.files.get(fileId);
+        if (file == null) {
+            throw new Error(`File not found for group ${name} file ${fileId}`);
+        }
+
+        if (!file.content) {
+            throw new Error(`File not found for group ${name} file ${fileId}`);
+        }
+
+        return file.content;
+    }
+
     public writeFile(groupId: number, fileId: number, data: Uint8Array, keys?: Int32Array) {
         const group = this.getOrCreateGroupMetadata(groupId, undefined, keys);
         const file: FileMetadata = {
@@ -276,6 +294,7 @@ export default class Js5Archive {
         if (group.size <= 1) {
             const file = [...group.files.values()][0];
             file.content = decompressedData;
+            group.isLoaded = true;
             return;
         }
 
@@ -324,6 +343,7 @@ export default class Js5Archive {
                 decompressedDataPointer += size;
             }
         }
+        group.isLoaded = true;
     }
 
     private encodeMetadata(): Uint8Array {
@@ -525,6 +545,19 @@ export default class Js5Archive {
         const group = this.groups.get(groupId);
         if (group == null) {
             throw new Error(`Group ${groupId} not found`);
+        }
+
+        if (!group.isLoaded && loadGroup) {
+            this.decodeGroup(group, keys);
+        }
+        return group;
+    }
+
+    private getNamedGroupMetadata(groupName: string, loadGroup: boolean = false, keys?: Int32Array): GroupMetadata {
+        // TODO support getting groups by name
+        const group = [...this.groups.values()].find(group => group.nameHash === genJagHash(groupName));
+        if (group == null) {
+            throw new Error(`Group ${groupName} not found`);
         }
 
         if (!group.isLoaded && loadGroup) {

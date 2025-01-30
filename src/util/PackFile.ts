@@ -206,18 +206,19 @@ function validateConfigPack(pack: PackFile, ext: string, regen: boolean = false,
 }
 
 function validateCategoryPack(pack: PackFile) {
-    if (shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.loc', `${Environment.BUILD_SRC_DIR}/pack/category.pack`) ||
-        shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.npc', `${Environment.BUILD_SRC_DIR}/pack/category.pack`) ||
-        shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.obj', `${Environment.BUILD_SRC_DIR}/pack/category.pack`)) {
-        const categories = crawlConfigCategories();
-        for (let i = 0; i < categories.length; i++) {
-            pack.register(i, categories[i]);
-        }
-        pack.refreshNames();
-        pack.save();
-    } else {
-        pack.load(`${Environment.BUILD_SRC_DIR}/pack/category.pack`);
-    }
+    pack.load(`${Environment.BUILD_SRC_DIR}/pack/category.pack`);
+    // if (shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.loc', `${Environment.BUILD_SRC_DIR}/pack/category.pack`) ||
+    //     shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.npc', `${Environment.BUILD_SRC_DIR}/pack/category.pack`) ||
+    //     shouldBuild(`${Environment.BUILD_SRC_DIR}/scripts`, '.obj', `${Environment.BUILD_SRC_DIR}/pack/category.pack`)) {
+    //     const categories = crawlConfigCategories();
+    //     for (let i = 0; i < categories.length; i++) {
+    //         pack.register(i, categories[i]);
+    //     }
+    //     pack.refreshNames();
+    //     pack.save();
+    // } else {
+    //     pack.load(`${Environment.BUILD_SRC_DIR}/pack/category.pack`);
+    // }
 }
 
 function validateInterfacePack(pack: PackFile) {
@@ -266,8 +267,6 @@ function regenScriptPack(pack: PackFile) {
     pack.save();
 }
 
-export const AnimPack = new PackFile('anim', validateFilesPack, `${Environment.BUILD_SRC_DIR}/models`, '.frame');
-export const BasePack = new PackFile('base', validateFilesPack, `${Environment.BUILD_SRC_DIR}/models`, '.base');
 export const CategoryPack = new PackFile('category', validateCategoryPack);
 export const DbRowPack = new PackFile('dbrow', validateConfigPack, '.dbrow', true, false, false, true);
 export const DbTablePack = new PackFile('dbtable', validateConfigPack, '.dbtable', true, false, false, true);
@@ -278,7 +277,8 @@ export const ScriptPack = new PackFile('script', regenScriptPack);
 export const StructPack = new PackFile('struct', validateConfigPack, '.struct', true, false, false, true);
 export const VarnPack = new PackFile('varn', validateConfigPack, '.varn', true, false, false, true);
 export const VarsPack = new PackFile('vars', validateConfigPack, '.vars', true, false, false, true);
-// added
+
+// added - client packs
 export const HuffmanPack = new PackFile('huffman');
 export const JinglePack = new PackFile('jingle');
 export const MusicPack = new PackFile('music');
@@ -304,8 +304,6 @@ export const NpcPack = new PackFile('npc');
 export const ObjPack = new PackFile('obj');
 
 export function revalidatePack() {
-    AnimPack.reload();
-    BasePack.reload();
     CategoryPack.reload();
     DbRowPack.reload();
     DbTablePack.reload();

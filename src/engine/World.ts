@@ -228,10 +228,10 @@ class World {
         ObjType.load('data/pack');
         LocType.load('data/pack');
         NpcType.load('data/pack');
-        IdkType.load('data/pack');
-        SeqFrame.load('data/pack');
-        SeqType.load('data/pack');
-        SpotanimType.load('data/pack');
+        // IdkType.load('data/pack');
+        // SeqFrame.load('data/pack');
+        // SeqType.load('data/pack');
+        // SpotanimType.load('data/pack');
         CategoryType.load('data/pack');
         EnumType.load('data/pack');
         StructType.load('data/pack');
@@ -246,7 +246,7 @@ class World {
             }
         }
 
-        MesanimType.load('data/pack');
+        // MesanimType.load('data/pack');
         DbTableType.load('data/pack');
         DbRowType.load('data/pack');
         HuntType.load('data/pack');
@@ -268,7 +268,7 @@ class World {
             }
         }
 
-        Component.load('data/pack');
+        // Component.load('data/pack');
 
         const count = ScriptProvider.load('data/pack');
         if (count === -1) {
@@ -278,10 +278,10 @@ class World {
         }
 
         // todo: check if any jag files changed (transmitted) then reload crcs, instead of always
-        makeCrcs();
+        // makeCrcs();
 
         // todo: detect and reload static data (like maps)
-        preloadClient();
+        // preloadClient();
     }
 
     async loadAsync(): Promise<void> {
@@ -293,23 +293,23 @@ class World {
             WordEnc.loadAsync('data/pack'),
             VarPlayerType.loadAsync('data/pack'),
             ParamType.loadAsync('data/pack'),
-            IdkType.loadAsync('data/pack'),
-            SeqFrame.loadAsync('data/pack'),
-            SeqType.loadAsync('data/pack'),
-            SpotanimType.loadAsync('data/pack'),
+            // IdkType.loadAsync('data/pack'),
+            // SeqFrame.loadAsync('data/pack'),
+            // SeqType.loadAsync('data/pack'),
+            // SpotanimType.loadAsync('data/pack'),
             CategoryType.loadAsync('data/pack'),
             EnumType.loadAsync('data/pack'),
             StructType.loadAsync('data/pack'),
             InvType.loadAsync('data/pack'),
-            MesanimType.loadAsync('data/pack'),
+            // MesanimType.loadAsync('data/pack'),
             DbTableType.loadAsync('data/pack'),
             DbRowType.loadAsync('data/pack'),
             HuntType.loadAsync('data/pack'),
             VarNpcType.loadAsync('data/pack'),
             VarSharedType.loadAsync('data/pack'),
-            Component.loadAsync('data/pack'),
-            makeCrcsAsync(),
-            preloadClientAsync(),
+            // Component.loadAsync('data/pack'),
+            // makeCrcsAsync(),
+            // preloadClientAsync(),
             ScriptProvider.loadAsync('data/pack'),
         ])).at(-1);
 
@@ -353,8 +353,8 @@ class World {
                 await this.gameMap.initAsync();
             }
         } else {
-            FontType.load('data/pack');
-            WordEnc.load('data/pack');
+            FontType.load('data/title');
+            WordEnc.load('data/wordenc');
 
             this.reload();
 
@@ -376,7 +376,7 @@ class World {
                 this.createDevThread();
 
                 if (Environment.BUILD_STARTUP) {
-                    this.rebuild();
+                    // this.rebuild();
                 }
             }
 

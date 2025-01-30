@@ -21,7 +21,7 @@ async function processChangedFiles() {
 
     try {
         await packServer();
-        await packClient();
+        // await packClient();
 
         if (parentPort) {
             parentPort.postMessage({
@@ -91,28 +91,28 @@ if (parentPort) {
     });
 }
 
-trackDir('data/src/maps');
-trackDir('data/src/songs');
+// trackDir('data/src/maps');
+// trackDir('data/src/songs');
 
 // title.jag
-trackDir('data/src/binary');
-trackDir('data/src/fonts');
-trackDir('data/src/title');
+// trackDir('data/src/binary');
+// trackDir('data/src/fonts');
+// trackDir('data/src/title');
 
 // config.jag, interface.jag
 trackDir('data/src/scripts');
 
 // media.jag
-trackDir('data/src/sprites');
-
-// models.jag
-trackDir('data/src/models');
-
-// textures.jag
-trackDir('data/src/textures');
-
-// sounds.jag
-trackDir('data/src/sounds');
-
-// wordenc.jag
-trackDir('data/src/wordenc');
+// trackDir('data/src/sprites');
+//
+// // models.jag
+// trackDir('data/src/models');
+//
+// // textures.jag
+// trackDir('data/src/textures');
+//
+// // sounds.jag
+// trackDir('data/src/sounds');
+//
+// // wordenc.jag
+// trackDir('data/src/wordenc');

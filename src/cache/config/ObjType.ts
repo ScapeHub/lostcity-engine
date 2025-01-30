@@ -9,6 +9,7 @@ import Jagfile from '#/io/Jagfile.js';
 import Environment from '#/util/Environment.js';
 import { printFatalError } from '#/util/Logger.js';
 import kleur from 'kleur';
+import Js5 from '#/js5/Js5.js';
 
 export default class ObjType extends ConfigType {
     static configNames: Map<string, number> = new Map();
@@ -20,8 +21,7 @@ export default class ObjType extends ConfigType {
         }
 
         const server = Packet.load(`${dir}/server/obj.dat`);
-        const jag = Jagfile.load(`${dir}/client/config`);
-        this.parse(server, jag);
+        this.parse(server);
     }
 
     static async loadAsync(dir: string) {
@@ -30,23 +30,22 @@ export default class ObjType extends ConfigType {
             return;
         }
 
-        const [server, jag] = await Promise.all([file.arrayBuffer(), Jagfile.loadAsync(`${dir}/client/config`)]);
-        this.parse(new Packet(new Uint8Array(server)), jag);
+        const [server] = await Promise.all([file.arrayBuffer()]);
+        this.parse(new Packet(new Uint8Array(server)));
     }
 
-    static parse(server: Packet, jag: Jagfile) {
+    static parse(server: Packet) {
         ObjType.configNames = new Map();
         ObjType.configs = [];
 
         const count = server.g2();
 
-        const client = jag.read('obj.dat')!;
-        client.pos = 2;
-
         for (let id = 0; id < count; id++) {
             const config = new ObjType(id);
+            const client = Js5.cache.configArchive.readFile(10, id);
+
             config.decodeType(server);
-            config.decodeType(client);
+            config.decodeType(new Packet(client));
 
             ObjType.configs[id] = config;
 
@@ -171,6 +170,12 @@ export default class ObjType extends ConfigType {
     countco: Uint16Array | null = null;
     certlink = -1;
     certtemplate = -1;
+    resizex = -1;
+    resizey = -1;
+    resizez = -1;
+    ambient = -1;
+    contrast = -1;
+    team = -1;
 
     // server-side
     wearpos = -1;
@@ -187,9 +192,7 @@ export default class ObjType extends ConfigType {
         if (code === 1) {
             this.model = dat.g2();
         } else if (code === 2) {
-            this.name = dat.gjstr();
-        } else if (code === 3) {
-            this.desc = dat.gjstr();
+            this.name = dat.gstr();
         } else if (code === 4) {
             this.zoom2d = dat.g2();
         } else if (code === 5) {
@@ -232,12 +235,12 @@ export default class ObjType extends ConfigType {
             if (!this.op) {
                 this.op = new Array(5).fill(null);
             }
-            this.op[code - 30] = dat.gjstr();
+            this.op[code - 30] = dat.gstr();
         } else if (code >= 35 && code < 40) {
             if (!this.iop) {
                 this.iop = new Array(5).fill(null);
             }
-            this.iop[code - 35] = dat.gjstr();
+            this.iop[code - 35] = dat.gstr();
         } else if (code === 40) {
             const count = dat.g1();
             this.recol_s = new Uint16Array(count);
@@ -278,6 +281,20 @@ export default class ObjType extends ConfigType {
             }
             this.countobj[code - 100] = dat.g2();
             this.countco[code - 100] = dat.g2();
+        } else if (code === 110) {
+            this.resizex = dat.g2();
+        } else if (code === 111) {
+            this.resizey = dat.g2();
+        } else if (code === 112) {
+            this.resizez = dat.g2();
+        } else if (code === 113) {
+            this.ambient = dat.g1b();
+        } else if (code === 114) {
+            this.contrast = dat.g1b();
+        } else if (code === 115) {
+            this.team = dat.g1();
+        } else if (code === 251) {
+            this.desc = dat.gjstr();
         } else if (code === 201) {
             this.respawnrate = dat.g2();
         } else if (code === 249) {

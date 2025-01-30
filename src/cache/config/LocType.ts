@@ -7,6 +7,7 @@ import { ParamHelper, ParamMap } from '#/cache/config/ParamHelper.js';
 import Jagfile from '#/io/Jagfile.js';
 import { printFatalError } from '#/util/Logger.js';
 import kleur from 'kleur';
+import Js5 from '#/js5/Js5.js';
 
 export default class LocType extends ConfigType {
     static configNames: Map<string, number> = new Map();
@@ -18,8 +19,7 @@ export default class LocType extends ConfigType {
         }
 
         const server = Packet.load(`${dir}/server/loc.dat`);
-        const jag = Jagfile.load(`${dir}/client/config`);
-        this.parse(server, jag);
+        this.parse(server);
         
     }
 
@@ -29,24 +29,23 @@ export default class LocType extends ConfigType {
             return;
         }
 
-        const [server, jag] = await Promise.all([file.arrayBuffer(), Jagfile.loadAsync(`${dir}/client/config`)]);
-        this.parse(new Packet(new Uint8Array(server)), jag);
+        const [server] = await Promise.all([file.arrayBuffer()]);
+        this.parse(new Packet(new Uint8Array(server)));
     }
 
-    static parse(server: Packet, jag: Jagfile) {
+    static parse(server: Packet) {
         LocType.configNames = new Map();
         LocType.configs = [];
 
         const count = server.g2();
 
-        const client = jag.read('loc.dat')!;
-        client.pos = 2;
-
         for (let id = 0; id < count; id++) {
             const config = new LocType(id);
+            const client = Js5.cache.configArchive.readFile(6, id);
+
             config.active = -1; // so we can infer if active should be automatically determined based on loc shape/ops available
             config.decodeType(server);
-            config.decodeType(client);
+            config.decodeType(new Packet(client));
 
             if (config.active === -1 && config.shapes) {
                 config.active = config.shapes.length > 0 && config.shapes[0] === 10 ? 1 : 0;
@@ -118,6 +117,11 @@ export default class LocType extends ConfigType {
     yoff = 0;
     zoff = 0;
     forcedecor = false;
+    breakroutefinding = false;
+    raiseobject = false;
+    varbit = -1;
+    varp = -1;
+    multilocs: number[] | null = null;
 
     // server-side
     category = -1;
@@ -134,7 +138,13 @@ export default class LocType extends ConfigType {
                 this.shapes[i] = dat.g1();
             }
         } else if (code === 2) {
-            this.name = dat.gjstr();
+            this.name = dat.gstr();
+        } else if (code === 5) {
+            const count = dat.g1();
+            this.models = new Uint16Array(count);
+            for (let i = 0; i < count; i++) {
+                this.models[i] = dat.g2();
+            }
         } else if (code === 14) {
             this.width = dat.g1();
         } else if (code === 15) {
@@ -170,7 +180,7 @@ export default class LocType extends ConfigType {
                 this.op = new Array(5).fill(null);
             }
 
-            this.op[code - 30] = dat.gjstr();
+            this.op[code - 30] = dat.gstr();
         } else if (code === 40) {
             const count = dat.g1();
             this.recol_s = new Uint16Array(count);
@@ -206,7 +216,31 @@ export default class LocType extends ConfigType {
             this.zoff = dat.g2s();
         } else if (code === 73) {
             this.forcedecor = true;
-        } else if (code === 249) {
+        } else if (code === 74) {
+            this.breakroutefinding = true;
+        } else if (code === 75) {
+            this.raiseobject = dat.gbool();
+        } else if (code === 77) {
+            this.varbit = dat.g2();
+            if (this.varbit == 65535) {
+                this.varbit = -1;
+            }
+
+            this.varp = dat.g2();
+            if (this.varp == 65535) {
+                this.varp = -1;
+            }
+
+            const size = dat.g1();
+            this.multilocs = new Array(size + 1);
+            for (let i = 0; i <= size; i++) {
+                this.multilocs[i] = dat.g2();
+                if (this.multilocs[i] == 65535) {
+                    this.multilocs[i] = -1;
+                }
+            }
+        }
+        else if (code === 249) {
             this.params = ParamHelper.decodeParams(dat);
         } else if (code === 250) {
             this.debugname = dat.gjstr();

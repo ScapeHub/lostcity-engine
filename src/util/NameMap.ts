@@ -76,6 +76,34 @@ export function loadPack(path: string) {
         }, [] as string[]);
 }
 
+export function loadBitPackedPack(path: string): Map<number, string>  {
+    if (!fs.existsSync(path)) {
+        return new Map<number, string>();
+    }
+
+    const lines: string[] = fs
+        .readFileSync(path, 'ascii')
+        .replace(/\r/g, '')
+        .split('\n')
+        .filter(x => x);
+    
+    const bitpacked = new Map<number, string>();
+    lines.forEach(line => {
+        const [id, name] = line.split('=');
+        if (id.includes(':')) {
+            const args = id.split(':');
+            const parent = parseInt(args[0]);
+            const child = parseInt(args[1]);
+
+            bitpacked.set(parent << 16 | child, name);
+            return;
+        }
+
+        bitpacked.set(parseInt(id), name);
+    });
+    return bitpacked;
+}
+
 export function loadDir(path: string, extension: string, callback: (src: string[], file: string, path: string) => void) {
     const files = listDir(path);
 

@@ -22,21 +22,6 @@ if (Environment.BUILD_STARTUP_UPDATE) {
     await updateCompiler();
 }
 
-if (!fs.existsSync('data/pack/client/config') || !fs.existsSync('data/pack/server/script.dat')) {
-    printInfo('Packing cache, please wait until you see the world is ready.');
-
-    try {
-        await packServer();
-        await packClient();
-    } catch (err) {
-        if (err instanceof Error) {
-            printError(err.message);
-        }
-    
-        process.exit(1);
-    }
-}
-
 // TODO better checking of cache files
 if (!fs.existsSync('data/cache/packed/main_file_cache.dat2')) {
     try {
@@ -52,6 +37,21 @@ if (!fs.existsSync('data/cache/packed/main_file_cache.dat2')) {
 
 Js5.open('./data/cache/packed');
 
+if (!fs.existsSync('data/pack/client/config') || !fs.existsSync('data/pack/server/script.dat')) {
+    printInfo('Packing cache, please wait until you see the world is ready.');
+
+    try {
+        await packServer();
+        // await packClient();
+    } catch (err) {
+        if (err instanceof Error) {
+            printError(err.message);
+        }
+    
+        process.exit(1);
+    }
+}
+
 fs.mkdirSync('data/players', { recursive: true });
 
 if (Environment.EASY_STARTUP) {
@@ -61,7 +61,9 @@ if (Environment.EASY_STARTUP) {
 }
 
 Js5UpdateServer.cycle();
-// await World.start();
+console.log('js5 is ready');
+await World.start();
+console.log('World is started');
 
 startWeb();
 startManagementWeb();

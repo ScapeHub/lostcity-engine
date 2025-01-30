@@ -18,7 +18,7 @@ export default class FontType {
     }
 
     static load(dir: string) {
-        const title = Jagfile.load(`${dir}/client/title`);
+        const title = Jagfile.load(`${dir}/title`);
 
         FontType.instances[0] = new FontType(title, 'p11');
         FontType.instances[1] = new FontType(title, 'p12');
@@ -27,7 +27,7 @@ export default class FontType {
     }
 
     static async loadAsync(dir: string) {
-        const title = await Jagfile.loadAsync(`${dir}/client/title`);
+        const title = await Jagfile.loadAsync(`${dir}/title`);
 
         FontType.instances[0] = new FontType(title, 'p11');
         FontType.instances[1] = new FontType(title, 'p12');

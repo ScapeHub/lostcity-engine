@@ -22,6 +22,7 @@ import EntityLifeCycle from '#/engine/entity/EntityLifeCycle.js';
 import Loc from '#/engine/entity/Loc.js';
 
 import { printDebug, printWarning } from '#/util/Logger.js';
+import Js5 from '#/js5/Js5.js';
 
 export default class GameMap {
     private static readonly OPEN: number = 0x0;
@@ -49,52 +50,94 @@ export default class GameMap {
         this.freemap = new Set();
     }
 
+    private loadMaps() {
+        let count = 0;
+        for (let x = 0; x < 100; x ++) {
+            for (let z = 0; z < 256; z++) {
+                const floorMapName = `m${x}_${z}`;
+                const locMapName = `l${x}_${z}`;
+                const lands: Int8Array = new Int8Array(GameMap.MAPSQUARE);
+
+                const mapsquareX: number = x << 6;
+                const mapsquareZ: number = z << 6;
+
+                let loaded = false;
+
+                let packet: Packet;
+                try {
+                    packet = new Packet(Js5.cache.worldMapArchive.readNamed(floorMapName, 0));
+                    this.loadGround(lands, packet, mapsquareX, mapsquareZ);
+                    loaded = true;
+                }
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                catch (_) { /* empty */ }
+
+                try {
+                    packet = new Packet(Js5.cache.worldMapArchive.readNamed(locMapName, 0, Js5.cache.getMapKeys(locMapName)));
+                    this.loadLocations(lands, packet, mapsquareX, mapsquareZ);
+                    loaded = true;
+                }
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                catch (_) { /* empty */ }
+
+                if (loaded) {
+                    count++;
+                }
+            }
+        }
+
+        printDebug(`Loaded ${count} maps`);
+    }
+
     init(): void {
         printDebug('Loading game map');
 
-        this.loadCsvMap(this.multimap, fs.readFileSync('data/src/maps/multiway.csv', 'ascii').replace(/\r/g, '').split('\n'));
-        this.loadCsvMap(this.freemap, fs.readFileSync('data/src/maps/free2play.csv', 'ascii').replace(/\r/g, '').split('\n'));
+        // this.loadCsvMap(this.multimap, fs.readFileSync('data/src/maps/multiway.csv', 'ascii').replace(/\r/g, '').split('\n'));
+        // this.loadCsvMap(this.freemap, fs.readFileSync('data/src/maps/free2play.csv', 'ascii').replace(/\r/g, '').split('\n'));
 
-        const path: string = 'data/pack/server/maps/';
-        const maps: string[] = fs.readdirSync(path).filter(x => x[0] === 'm');
-        for (let index: number = 0; index < maps.length; index++) {
-            const [mx, mz] = maps[index].substring(1).split('_').map(Number);
-            const mapsquareX: number = mx << 6;
-            const mapsquareZ: number = mz << 6;
+        // const path: string = 'data/pack/server/maps/';
+        // const maps: string[] = fs.readdirSync(path).filter(x => x[0] === 'm');
+        // for (let index: number = 0; index < maps.length; index++) {
+        //     const [mx, mz] = maps[index].substring(1).split('_').map(Number);
+        //     const mapsquareX: number = mx << 6;
+        //     const mapsquareZ: number = mz << 6;
+        //
+        //     // this.loadNpcs(Packet.load(`${path}n${mx}_${mz}`), mapsquareX, mapsquareZ);
+        //     // this.loadObjs(Packet.load(`${path}o${mx}_${mz}`), mapsquareX, mapsquareZ);
+        //     // collision
+        //     const lands: Int8Array = new Int8Array(GameMap.MAPSQUARE); // 4 * 64 * 64 size is guaranteed for lands
+        //     this.loadGround(lands, Packet.load(`${path}m${mx}_${mz}`), mapsquareX, mapsquareZ);
+        //     this.loadLocations(lands, Packet.load(`${path}l${mx}_${mz}`), mapsquareX, mapsquareZ);
+        // }
 
-            this.loadNpcs(Packet.load(`${path}n${mx}_${mz}`), mapsquareX, mapsquareZ);
-            this.loadObjs(Packet.load(`${path}o${mx}_${mz}`), mapsquareX, mapsquareZ);
-            // collision
-            const lands: Int8Array = new Int8Array(GameMap.MAPSQUARE); // 4 * 64 * 64 size is guaranteed for lands
-            this.loadGround(lands, Packet.load(`${path}m${mx}_${mz}`), mapsquareX, mapsquareZ);
-            this.loadLocations(lands, Packet.load(`${path}l${mx}_${mz}`), mapsquareX, mapsquareZ);
-        }
+        this.loadMaps();
     }
 
     async initAsync(): Promise<void> {
-        const path: string = 'data/pack/server/maps/';
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        const { serverMaps } = await import('#/server/PreloadedDirs.js');
-        const maps = serverMaps.map(async (map: string) => {
-            const [mx, mz] = map.substring(1).split('_').map(Number);
-            const mapsquareX: number = mx << 6;
-            const mapsquareZ: number = mz << 6;
+        // const path: string = 'data/pack/server/maps/';
+        // // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+        // // @ts-ignore
+        // const { serverMaps } = await import('#/server/PreloadedDirs.js');
+        // const maps = serverMaps.map(async (map: string) => {
+        //     const [mx, mz] = map.substring(1).split('_').map(Number);
+        //     const mapsquareX: number = mx << 6;
+        //     const mapsquareZ: number = mz << 6;
+        //
+        //     const [npcData, objData, landData, locData] = await Promise.all([
+        //         await Packet.loadAsync(`${path}n${mx}_${mz}`),
+        //         await Packet.loadAsync(`${path}o${mx}_${mz}`),
+        //         await Packet.loadAsync(`${path}m${mx}_${mz}`),
+        //         await Packet.loadAsync(`${path}l${mx}_${mz}`)]);
+        //
+        //     this.loadNpcs(npcData, mapsquareX, mapsquareZ);
+        //     this.loadObjs(objData, mapsquareX, mapsquareZ);
+        //     // collision
+        //     const lands: Int8Array = new Int8Array(GameMap.MAPSQUARE); // 4 * 64 * 64 size is guaranteed for lands
+        //     this.loadGround(lands, landData, mapsquareX, mapsquareZ);
+        //     this.loadLocations(lands, locData, mapsquareX, mapsquareZ);
+        // });
 
-            const [npcData, objData, landData, locData] = await Promise.all([
-                await Packet.loadAsync(`${path}n${mx}_${mz}`),
-                await Packet.loadAsync(`${path}o${mx}_${mz}`),
-                await Packet.loadAsync(`${path}m${mx}_${mz}`),
-                await Packet.loadAsync(`${path}l${mx}_${mz}`)]);
-
-            this.loadNpcs(npcData, mapsquareX, mapsquareZ);
-            this.loadObjs(objData, mapsquareX, mapsquareZ);
-            // collision
-            const lands: Int8Array = new Int8Array(GameMap.MAPSQUARE); // 4 * 64 * 64 size is guaranteed for lands
-            this.loadGround(lands, landData, mapsquareX, mapsquareZ);
-            this.loadLocations(lands, locData, mapsquareX, mapsquareZ);
-        });
-        await Promise.all(maps);
+        this.loadMaps();
     }
 
     isMulti(coord: number): boolean {

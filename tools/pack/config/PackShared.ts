@@ -3,7 +3,7 @@ import readline from 'readline';
 
 import Packet from '#/io/Packet.js';
 
-import { AnimPack, CategoryPack, shouldBuild, shouldBuildFile, VarbitPack, VarnPack, VarpPack, VarsPack } from '#/util/PackFile.js';
+import { CategoryPack, shouldBuild, shouldBuildFile, VarbitPack, VarnPack, VarpPack, VarsPack } from '#/util/PackFile.js';
 
 import ParamType from '#/cache/config/ParamType.js';
 
@@ -13,7 +13,6 @@ import { packLocConfigs, parseLocConfig } from '#tools/pack/config/LocConfig.js'
 import { packNpcConfigs, parseNpcConfig } from '#tools/pack/config/NpcConfig.js';
 import { packObjConfigs, parseObjConfig } from '#tools/pack/config/ObjConfig.js';
 import { packVarpConfigs, parseVarpConfig } from '#tools/pack/config/VarpConfig.js';
-import { listFilesExt } from '#/util/Parse.js';
 
 import DbTableType from '#/cache/config/DbTableType.js';
 
@@ -21,12 +20,12 @@ import { packDbRowConfigs, parseDbRowConfig } from '#tools/pack/config/DbRowConf
 import { packDbTableConfigs, parseDbTableConfig } from '#tools/pack/config/DbTableConfig.js';
 import { packEnumConfigs, parseEnumConfig } from '#tools/pack/config/EnumConfig.js';
 import { packInvConfigs, parseInvConfig } from '#tools/pack/config/InvConfig.js';
-import { packMesAnimConfigs, parseMesAnimConfig } from '#tools/pack/config/MesAnimConfig.js';
 import { packStructConfigs, parseStructConfig } from '#tools/pack/config/StructConfig.js';
 import { packHuntConfigs, parseHuntConfig } from '#tools/pack/config/HuntConfig.js';
 import { packVarnConfigs, parseVarnConfig } from '#tools/pack/config/VarnConfig.js';
 import { packVarsConfigs, parseVarsConfig } from '#tools/pack/config/VarsConfig.js';
 import Jagfile from '#/io/Jagfile.js';
+import { packVarbitConfigs, parseVarbitConfig } from '#tools/pack/config/VarbitConfig.js';
 
 export function isConfigBoolean(input: string): boolean {
     return input === 'yes' || input === 'no' || input === 'true' || input === 'false' || input === '1' || input === '0';
@@ -311,6 +310,9 @@ export async function packConfigs() {
     const dirTree = new Set<string>();
     readDirTree(dirTree, 'data/src/scripts');
 
+    const configTree = new Set<string>();
+    readDirTree(configTree, 'data/cache/unpacked/config');
+
     // We have to pack params for other configs to parse correctly
     if (shouldBuild('data/src/scripts', '.param', 'data/pack/server/param.dat')) {
         await readConfigs(dirTree, '.param', ['type'], parseParamConfig, packParamConfigs, (dat: Packet, idx: Packet) => {
@@ -363,40 +365,41 @@ export async function packConfigs() {
     }
 
     // want the server to access frame lengths without loading data from models
-    if (shouldBuild('data/src/models', '.frame', 'data/pack/server/frame_del.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/frame_del.dat')) {
-        const files = listFilesExt('data/src/models', '.frame');
-        const frame_del = Packet.alloc(3);
-        for (let i = 0; i < AnimPack.max; i++) {
-            const name = AnimPack.getById(i);
-            if (!name.length) {
-                frame_del.p1(0);
-                continue;
-            }
-
-            const file = files.find(file => file.endsWith(`${name}.frame`));
-            if (!file) {
-                frame_del.p1(0);
-                continue;
-            }
-
-            const data = Packet.load(file);
-
-            data.pos = data.data.length - 8;
-            const headLength = data.g2();
-            const tran1Length = data.g2();
-            const tran2Length = data.g2();
-            // const delLength = data.g2();
-
-            data.pos = 0;
-            data.pos += headLength;
-            data.pos += tran1Length;
-            data.pos += tran2Length;
-            frame_del.p1(data.g1());
-        }
-
-        frame_del.save('data/pack/server/frame_del.dat');
-        frame_del.release();
-    }
+    // TODO anims?
+    // if (shouldBuild('data/src/models', '.frame', 'data/pack/server/frame_del.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/frame_del.dat')) {
+    //     const files = listFilesExt('data/src/models', '.frame');
+    //     const frame_del = Packet.alloc(3);
+    //     for (let i = 0; i < AnimPack.max; i++) {
+    //         const name = AnimPack.getById(i);
+    //         if (!name.length) {
+    //             frame_del.p1(0);
+    //             continue;
+    //         }
+    //
+    //         const file = files.find(file => file.endsWith(`${name}.frame`));
+    //         if (!file) {
+    //             frame_del.p1(0);
+    //             continue;
+    //         }
+    //
+    //         const data = Packet.load(file);
+    //
+    //         data.pos = data.data.length - 8;
+    //         const headLength = data.g2();
+    //         const tran1Length = data.g2();
+    //         const tran2Length = data.g2();
+    //         // const delLength = data.g2();
+    //
+    //         data.pos = 0;
+    //         data.pos += headLength;
+    //         data.pos += tran1Length;
+    //         data.pos += tran2Length;
+    //         frame_del.p1(data.g1());
+    //     }
+    //
+    //     frame_del.save('data/pack/server/frame_del.dat');
+    //     frame_del.release();
+    // }
 
     // ----
 
@@ -435,8 +438,8 @@ export async function packConfigs() {
         });
     }
 
-    if (shouldBuild('data/src/scripts', '.inv', 'data/pack/server/inv.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/inv.dat')) {
-        await readConfigs(dirTree, '.inv', [], parseInvConfig, packInvConfigs, (dat: Packet, idx: Packet) => {
+    if (shouldBuild('data/src/cache/unpacked/config', '.inv', 'data/pack/server/inv.dat')) {
+        await readConfigs(configTree, '.inv', [], parseInvConfig, packInvConfigs, (dat: Packet, idx: Packet) => {
             dat.save('data/pack/server/inv.dat');
             idx.save('data/pack/server/inv.idx');
             dat.release();
@@ -444,14 +447,15 @@ export async function packConfigs() {
         });
     }
 
-    if (shouldBuild('data/src/scripts', '.mesanim', 'data/pack/server/mesanim.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/mesanim.dat')) {
-        await readConfigs(dirTree, '.mesanim', [], parseMesAnimConfig, packMesAnimConfigs, (dat: Packet, idx: Packet) => {
-            dat.save('data/pack/server/mesanim.dat');
-            idx.save('data/pack/server/mesanim.idx');
-            dat.release();
-            idx.release();
-        });
-    }
+    // TODO why do we need mesanims?
+    // if (shouldBuild('data/src/scripts', '.mesanim', 'data/pack/server/mesanim.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/mesanim.dat')) {
+    //     await readConfigs(dirTree, '.mesanim', [], parseMesAnimConfig, packMesAnimConfigs, (dat: Packet, idx: Packet) => {
+    //         dat.save('data/pack/server/mesanim.dat');
+    //         idx.save('data/pack/server/mesanim.idx');
+    //         dat.release();
+    //         idx.release();
+    //     });
+    // }
 
     if (shouldBuild('data/src/scripts', '.struct', 'data/pack/server/struct.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/struct.dat')) {
         await readConfigs(dirTree, '.struct', [], parseStructConfig, packStructConfigs, (dat: Packet, idx: Packet) => {
@@ -476,8 +480,8 @@ export async function packConfigs() {
     //     });
     // }
 
-    if (shouldBuild('data/src/scripts', '.loc', 'data/pack/server/loc.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/loc.dat')) {
-        await readConfigs(dirTree, '.loc', [], parseLocConfig, packLocConfigs, (dat: Packet, idx: Packet) => {
+    if (shouldBuild('data/src/cache/unpacked/config', '.loc', 'data/pack/server/loc.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/loc.dat')) {
+        await readConfigs(configTree, '.loc', [], parseLocConfig, packLocConfigs, (dat: Packet, idx: Packet) => {
             dat.save('data/pack/server/loc.dat');
             idx.save('data/pack/server/loc.idx');
             dat.release();
@@ -509,8 +513,8 @@ export async function packConfigs() {
     //     });
     // }
 
-    if (shouldBuild('data/src/scripts', '.npc', 'data/pack/server/npc.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/npc.dat')) {
-        await readConfigs(dirTree, '.npc', [], parseNpcConfig, packNpcConfigs, (dat: Packet, idx: Packet) => {
+    if (shouldBuild('data/src/cache/unpacked/config', '.npc', 'data/pack/server/npc.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/npc.dat')) {
+        await readConfigs(configTree, '.npc', [], parseNpcConfig, packNpcConfigs, (dat: Packet, idx: Packet) => {
             dat.save('data/pack/server/npc.dat');
             idx.save('data/pack/server/npc.idx');
             dat.release();
@@ -518,8 +522,8 @@ export async function packConfigs() {
         });
     }
 
-    if (shouldBuild('data/src/scripts', '.obj', 'data/pack/server/obj.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/obj.dat')) {
-        await readConfigs(dirTree, '.obj', [], parseObjConfig, packObjConfigs, (dat: Packet, idx: Packet) => {
+    if (shouldBuild('data/src/cache/unpacked/config', '.obj', 'data/pack/server/obj.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/obj.dat')) {
+        await readConfigs(configTree, '.obj', [], parseObjConfig, packObjConfigs, (dat: Packet, idx: Packet) => {
             dat.save('data/pack/server/obj.dat');
             idx.save('data/pack/server/obj.idx');
             dat.release();
@@ -539,10 +543,19 @@ export async function packConfigs() {
     //     });
     // }
 
-    if (shouldBuild('data/src/scripts', '.varp', 'data/pack/server/varp.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/varp.dat')) {
-        await readConfigs(dirTree, '.varp', [], parseVarpConfig, packVarpConfigs, (dat: Packet, idx: Packet) => {
+    if (shouldBuild('data/src/cache/unpacked/config', '.varp', 'data/pack/server/varp.dat') || shouldBuild('src/cache/packconfig', '.ts', 'data/pack/server/varp.dat')) {
+        await readConfigs(configTree, '.varp', [], parseVarpConfig, packVarpConfigs, (dat: Packet, idx: Packet) => {
             dat.save('data/pack/server/varp.dat');
             idx.save('data/pack/server/varp.idx');
+            dat.release();
+            idx.release();
+        });
+    }
+
+    if (shouldBuild('data/src/cache/unpacked/config', '.varbit', 'data/pack/server/varbit.dat')) {
+        await readConfigs(configTree, '.varbit', [], parseVarbitConfig, packVarbitConfigs, (dat: Packet, idx: Packet) => {
+            dat.save('data/pack/server/varbit.dat');
+            idx.save('data/pack/server/varbit.idx');
             dat.release();
             idx.release();
         });
